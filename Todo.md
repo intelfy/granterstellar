@@ -113,4 +113,8 @@ Todo:
         Implement paywall if user hits limit for plan []
         Implement CTAs for upgrading []
         Implement basic forum functionality []
+        Wire landing page payment buttons []
+        Wire all other missing functionality []
+        Add login/signup to landing page []
+        SECURITY AUDIT []
     4. TESTING GO LIVE []
