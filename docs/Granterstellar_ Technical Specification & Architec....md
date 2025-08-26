@@ -13,7 +13,7 @@ The blueprint is built upon three critical strategic pillars that are essential 
 ### **Architectural Vision: Monolith with Service Separation**
 
 The chosen architectural vision for Granterstellar is a containerized monolith. This approach is optimal for a project that prioritizes self-hosting and full data control. Unlike a complex microservices architecture, a monolith simplifies deployment, management, and debugging, as all core services and business logic reside within a single codebase. The user has specified that the application itself will not be distributed or open source but will be deployed as a SaaS solution on self-hosted servers. The use of Docker and Docker Compose is therefore purely for internal development and operational efficiency, standardizing the environment and simplifying the deployment process on our Linux servers.  
-The system will be composed of two primary, independently developed components. The backend, built with the Django framework, will serve as the central API layer. It will handle all critical business logic, including user authentication, data persistence, and communication with third-party services. The frontend, a single-page application (SPA) developed with React, will consume these APIs to provide a rich, interactive user interface. This separation of concerns ensures that the user interface can evolve and scale independently from the server-side logic, without the complexity of a fully distributed system. The communication between the two layers will be handled via a RESTful API, providing a clean contract that facilitates parallel development and a more maintainable codebase. An NGINX reverse proxy will act as the entry point, routing requests to the appropriate Docker containers, which enhances security and simplifies container management.
+The system will be composed of two primary, independently developed components. The backend, built with the Django framework, will serve as the central API layer. It will handle all critical business logic, including user authentication, data persistence, and communication with third-party services. The frontend, a single-page application (SPA) developed with React, will consume these APIs to provide a rich, interactive user interface. This separation of concerns ensures that the user interface can evolve and scale independently from the server-side logic, without the complexity of a fully distributed system. The communication between the two layers will be handled via a RESTful API, providing a clean contract that facilitates parallel development and a more maintainable codebase. In deployment, Coolify manages a Traefik reverse proxy as the entry point, routing requests to the appropriate containers and handling TLS certificates; locally, Docker Compose can be used without an explicit proxy service.
 
 ### **Technology Stack Summary**
 
@@ -147,7 +147,22 @@ All API keys for third-party services (AI, OAuth, Payments) will be stored in en
 ### **Containerization with Docker Compose**
 
 The user's requirement for self-hosting on Linux servers makes containerization with Docker and Docker Compose the ideal solution. Docker simplifies the entire deployment process by packaging the application, its dependencies, and its configuration into a single, portable unit called a container. This eliminates the "it works on my machine" problem and ensures that the application will run consistently across all environments.  
-Docker Compose, in turn, simplifies the management of the multi-container application. A single docker-compose.yml file will define all the services—the front-end, the back-end, the database, and the reverse proxy—and their interconnections. With a single command, the entire stack can be built and deployed, which dramatically reduces the complexity of self-hosting for the end user.
+ Docker Compose, in turn, simplifies the management of the multi-container application. A single docker-compose.yml file will define all the services—the front-end, the back-end, and the database—and their interconnections. In Coolify, Traefik is provided and configured by the platform (via UI or labels), so we do not run our own reverse proxy container. With a single command locally (or via Coolify’s deploy), the entire stack can be built and deployed, which dramatically reduces the complexity of self-hosting for the end user.
+
+### **Coolify + Traefik topology (deployment options)**
+
+There are two workable ways to publish the app behind Coolify-managed Traefik while keeping the codebase separation of concerns:
+
+1) Single-application deployment (recommended for MVP)
+- Build the React SPA to static assets during CI and bundle them into the Django image (served via WhiteNoise or Django static files).
+- Traefik routes the root domain to the Django service; the API lives at /api under the same container (no cross-origin, simpler cookies and headers).
+- Pros: One Coolify app, fewer moving parts, simpler TLS and headers, no path-based routing config. Cons: Tight coupling at deploy time; SPA rebuild needed for API redeploys (mitigated by CI caching and multi-stage builds).
+
+2) Dual-application deployment (SPA + API)
+- Two Coolify apps share the same domain with path-based routing: Host(`app.example.com`) → SPA, and Host(`app.example.com`) && PathPrefix(`/api`) → API.
+- Pros: Independent deploy cadence and scaling. Cons: Path-based router rules to maintain; CORS and cookies require careful configuration; more moving parts.
+
+Either topology maintains the architectural split in code. For early testers, prefer option 1 to minimize operational complexity; revisit option 2 when traffic or org structure requires independent scaling.
 
 ### **Backup and Disaster Recovery**
 

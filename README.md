@@ -2,6 +2,14 @@
 
 Minimal, mobile‑first landing page with a waitlist form — self‑hosted Mailgun proxy.
 
+Note: For the full application (API + SPA + DB) with Coolify/Traefik deployment, see `docs/README-full-app.md` (skeleton; will replace this README when the stack is ready).
+___________________________
+
+
+
+
+
+
 Submit options
 - Mailgun (default): form posts to `/api/waitlist` handled by `server.mjs` which calls Mailgun (double opt‑in).
 - External endpoint (Formspree/etc.): set `data-endpoint` on the form to override.

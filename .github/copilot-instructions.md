@@ -4,7 +4,7 @@ Purpose: Equip AI coding agents to work effectively in this repo by summarizing 
 
 ## Big picture
 - App: Granterstellar — guided grant-writing SaaS with export to .md/.docx/.pdf and a freemium model.
-- Architecture: containerized monolith with a separated React SPA frontend and Django API backend, fronted by NGINX; PostgreSQL with JSONB for proposal content.
+- Architecture: containerized monolith with a separated React SPA frontend and Django API backend, deployed via Coolify behind Traefik; PostgreSQL with JSONB for proposal content.
 - Data model: Relational core (Users, Organizations, Grants, Proposals, Subscriptions) + JSONB column on Proposals for dynamic, sectioned content; RLS for tenant isolation and role-based org access.
 - AI: Hybrid approach — paid LLM (e.g., GPT-5/Gemini) for complex multimodal generation; optional self-hosted lightweight model for simple tasks.
 - Forms: SurveyJS on the client produces JSON consumed/stored by backend (no heavy transformation).
@@ -43,7 +43,7 @@ Purpose: Equip AI coding agents to work effectively in this repo by summarizing 
 - OCR pipeline for images/PDFs before feeding to LLM.
 
 ## Build, run, deploy
-- Container-first. Use Docker Compose with services: web (React), api (Django), db (Postgres), proxy (NGINX), optional backup (Duplicati), optional diagram renderer.
+- Container-first. Use Docker Compose with services: web (React), api (Django), db (Postgres), optional backup (Duplicati), optional diagram renderer. In Coolify, Traefik is managed by the platform—no proxy container in compose.
 - Typical lifecycle:
   1) docker compose up --build
   2) docker compose logs <service>
