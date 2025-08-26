@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
         if (data?.pending === true) {
-          setMsg('Check your inbox to confirm your subscription.', true);
+          setMsg('Check your inbox to confirm your subscription. Please check your junk folder too, we are working on this but right now our mails tend to end up there.', true);
         } else {
           setMsg("You're on the list. Thank you!", true);
         }
