@@ -29,7 +29,7 @@
 html, body { height: 100%; }
 html { scroll-behavior: smooth; }
 body {
-  margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  margin: 0; font-family: 'iaWriterDuospace', ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
   background: radial-gradient(1000px 600px at 20% -10%, #fff7eb 0%, transparent 70%), var(--bg);
   color: var(--fg); -webkit-font-smoothing: antialiased; line-height: 1.6;
 }
