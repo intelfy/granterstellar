@@ -33,6 +33,7 @@ body {
   background: radial-gradient(1000px 600px at 20% -10%, #fff7eb 0%, transparent 70%), var(--bg);
   color: var(--fg); -webkit-font-smoothing: antialiased; line-height: 1.6;
 }
+body p {margin-bottom:1rem;}
 .container { width: 100%; max-width: 960px; margin: 0 auto; padding: 0 16px; }
 .nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; }
 .logo { font-weight: 800; letter-spacing: 0.3px; }
