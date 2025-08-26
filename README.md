@@ -12,6 +12,7 @@ Dev usage
 	- defaults:
 		- MAILGUN_DOMAIN=mg.intelfy.dk
 		- MAILGUN_LIST=granterstellar@mg.intelfy.dk
+		- MAILGUN_API_HOST=api.mailgun.net (set to api.eu.mailgun.net for EU regions)
 		- PUBLIC_BASE_URL=http://localhost:5173
 	- run: `node server.mjs` then http://localhost:5173
 - Docker:
@@ -62,7 +63,8 @@ Deploy on Coolify (DigitalOcean + Traefik)
 
 4) Environment variables (Secrets → Environment)
 	- MAILGUN_DOMAIN: `mg.intelfy.dk`
-	- MAILGUN_API_KEY: `key-xxxxxxxxxxxxxxxxxxxxxxxx`
+	- MAILGUN_API_KEY: your Mailgun private API key
+	- MAILGUN_API_HOST: `api.mailgun.net` or `api.eu.mailgun.net` depending on your Mailgun region
 	- MAILGUN_LIST: `granterstellar@mg.intelfy.dk`
 	- PUBLIC_BASE_URL: `https://landing.intelfy.dk` (or your chosen domain)
 
@@ -95,6 +97,7 @@ Deploy on Coolify (DigitalOcean + Traefik)
 Env vars
 - MAILGUN_DOMAIN: your Mailgun domain (e.g., mg.intelfy.dk)
 - MAILGUN_API_KEY: your Mailgun private API key
+- MAILGUN_API_HOST: Mailgun API host; use `api.mailgun.net` (US) or `api.eu.mailgun.net` (EU)
 - MAILGUN_LIST: Mailgun mailing list address (e.g., granterstellar@mg.intelfy.dk). Required for double opt‑in.
 - PUBLIC_BASE_URL: base URL used to build confirmation links for double opt‑in.
 

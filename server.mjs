@@ -29,6 +29,8 @@ const PORT = Number(process.env.PORT || 5173);
 const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || '';
 const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY || '';
 const MAILGUN_LIST = process.env.MAILGUN_LIST || ''; // e.g., waitlist@mg.example.com
+const MAILGUN_API_HOST = process.env.MAILGUN_API_HOST || 'api.mailgun.net'; // set to api.eu.mailgun.net for EU regions
+
 
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -69,7 +71,7 @@ async function addToMailingList(email, opts = {}) {
   ).toString();
 
   const options = {
-    hostname: 'api.mailgun.net',
+    hostname: MAILGUN_API_HOST,
     port: 443,
     path,
     method: 'POST',
@@ -134,7 +136,7 @@ async function handle(req, res) {
     if (!checkRate(ip)) return sendJson(res, 429, { error: 'Too many requests' });
     let body = '';
     req.on('data', (chunk) => (body += chunk));
-    req.on('end', async () => {
+  req.on('end', async () => {
       try {
         const data = JSON.parse(body || '{}');
         const email = String((data.email || '').trim().toLowerCase());
@@ -155,6 +157,7 @@ async function handle(req, res) {
         await sendMail(email, 'Confirm your Granterstellar waitlist subscription', `Please confirm your email by visiting: ${confirmLink}\n\nIf you didn't request this, ignore this email.`);
         return sendJson(res, 200, { ok: true, pending: true });
       } catch (e) {
+        console.error('[waitlist] Error handling request:', e?.message || e, e?.stack || '');
         return sendJson(res, 500, { error: 'Server error' });
       }
     });
@@ -175,7 +178,8 @@ async function handle(req, res) {
         return sendJson(res, 200, { ok: true });
       }
       return sendJson(res, 400, { error: 'Invalid token' });
-    } catch {
+    } catch (e) {
+      console.error('[confirm] Error confirming subscription:', e?.message || e, e?.stack || '');
       return sendJson(res, 500, { error: 'Server error' });
     }
   }
@@ -252,7 +256,7 @@ async function sendMail(to, subject, text) {
     text,
   }).toString();
   const options = {
-    hostname: 'api.mailgun.net',
+  hostname: MAILGUN_API_HOST,
     port: 443,
     path: `/v3/${encodeURIComponent(MAILGUN_DOMAIN)}/messages`,
     method: 'POST',
@@ -277,7 +281,7 @@ async function confirmMember(email, token) {
   // Fetch member to verify token, then set subscribed=yes if matches
   if (!MAILGUN_LIST) throw new Error('MAILGUN_LIST is required for double opt-in');
   const getOptions = {
-    hostname: 'api.mailgun.net',
+  hostname: MAILGUN_API_HOST,
     port: 443,
     path: `/v3/lists/${encodeURIComponent(MAILGUN_LIST)}/members/${encodeURIComponent(email)}`,
     method: 'GET',
@@ -299,7 +303,7 @@ async function confirmMember(email, token) {
 
   const postData = new URLSearchParams({ subscribed: 'yes', upsert: 'yes', vars: JSON.stringify({ ...vars, token: undefined }) }).toString();
   const updOptions = {
-    hostname: 'api.mailgun.net',
+  hostname: MAILGUN_API_HOST,
     port: 443,
     path: `/v3/lists/${encodeURIComponent(MAILGUN_LIST)}/members/${encodeURIComponent(email)}`,
     method: 'PUT',
