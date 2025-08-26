@@ -1,0 +1,16 @@
+version: '3.9'
+services:
+  landing:
+    build: .
+    image: granterstellar-landing:latest
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5173/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

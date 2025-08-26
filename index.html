@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Granterstellar by intelfy — grant writing made simple</title>
+    <meta name="description" content="Granterstellar helps non-profits and small businesses write winning grant proposals with an AI-guided, step-by-step workflow." />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="favicon.ico" />
+  </head>
+  <body>
+    <header class="container">
+      <nav class="nav">
+        <div class="logo">
+          <span class="logo-pill" aria-label="Granterstellar">
+            <span class="brand">Granterstellar</span>
+            <span class="caret" aria-hidden="true"></span>
+          </span>
+        </div>
+  <a class="cta" href="#">Get early access</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero container">
+        <div class="hero-copy">
+          <h1>Building is difficult. Grant writing shouldn't be.</h1>
+          <p class="sub">Tell us which grant you're applying for, answer a few questions, attach your docs, and let our assistant turn it all into a polished, export‑ready proposal — without the stress.<br /><hr /><br />We are getting ready to welcome our first cohort of early access testers. If you would like to get a preview of what's to come, please sign up using the form below. As a thanks, testers will be granted a free PRO subscription until release and an additional 6 months of free PRO thereafter.</p>
+
+          <form
+            id="waitlist-form"
+            class="waitlist"
+            method="POST"
+            action="#"
+            data-endpoint="/api/waitlist"
+            novalidate
+          >
+            <p class="sr-only">
+              <label for="hp">Leave this field empty</label>
+              <input id="hp" name="hp" type="text" tabindex="-1" autocomplete="off" />
+            </p>
+            <label class="sr-only" for="email">Email address</label>
+            <input id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.org" required />
+            <button type="submit">Join waitlist</button>
+            <div class="msg" id="form-msg" role="status" aria-live="polite"></div>
+            <p class="privacy">No spam. We’ll only email you about availability and early access.</p>
+          </form>
+        </div>
+        <div class="hero-illus" aria-hidden="true">
+          <!-- Inline SVG illustration: soft blob + playful shapes -->
+          <svg class="blob" viewBox="0 0 400 320" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="g1" x1="0" x2="1" y1="0" y2="1">
+                <stop offset="0%" stop-color="#fde68a"/>
+                <stop offset="100%" stop-color="#fcd34d"/>
+              </linearGradient>
+            </defs>
+            <path d="M323 126c22 43-2 97-44 127s-101 35-145 14-72-69-58-112 72-75 122-88 103 16 125 59z" fill="url(#g1)" opacity="0.85"/>
+            <circle cx="120" cy="90" r="10" fill="#f97316"/>
+            <circle cx="270" cy="210" r="8" fill="#10b981"/>
+            <rect x="220" y="80" width="24" height="24" rx="6" fill="#ef4444"/>
+          </svg>
+        </div>
+      </section>
+
+      <section class="section container">
+        <div class="copy">
+          <h2>Step‑by‑step, without the overwhelm</h2>
+          <p>Answer a few focused questions per section. We turn those into a clear, cohesive draft you can review and approve as you go.</p>
+        </div>
+        <div class="illus" aria-hidden="true">
+          <div class="lottie-slot" data-animation="guided-flow.json">
+            <span class="placeholder">Illustration placeholder</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section alt container">
+        <div class="illus" aria-hidden="true">
+          <div class="lottie-slot" data-animation="team-collab.json">
+            <span class="placeholder">Illustration placeholder</span>
+          </div>
+        </div>
+        <div class="copy">
+          <h2>Made for teams</h2>
+          <p>Invite teammates, see changes at a glance, and keep drafts flowing. Org‑aware access lets you share safely.</p>
+        </div>
+      </section>
+
+      <section class="section container">
+        <div class="copy">
+          <h2>Export that sticks</h2>
+          <p>Download to .docx, .md, or .pdf with formatting that holds up when you send or print.</p>
+        </div>
+        <div class="illus" aria-hidden="true">
+          <div class="lottie-slot" data-animation="export.json">
+            <span class="placeholder">Illustration placeholder</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section container band" id="planned">
+        <div class="illus" aria-hidden="true">
+          <div class="lottie-slot" data-animation="roadmap.json">
+            <span class="placeholder">Illustration placeholder</span>
+          </div>
+        </div>
+        <div class="copy">
+          <h2>Planned features</h2>
+          <div class="features-grid">
+            <article class="feature-card">
+              <div class="top">
+                <span class="icon" aria-hidden="true">🔎</span>
+              </div>
+              <h3>Grant matches tailored to you</h3>
+              <p>Tell us about your non‑profit or business. We’ll surface grants that fit and let you start a draft in one click.</p>
+            </article>
+
+            <article class="feature-card">
+              <div class="top">
+                <span class="icon" aria-hidden="true">🔔</span>
+              </div>
+              <h3>Smart grant notifications</h3>
+              <p>Follow the grants you care about. We’ll nudge you when applications open, close, or timelines change.</p>
+            </article>
+
+            <article class="feature-card">
+              <div class="top">
+                <span class="icon" aria-hidden="true">📊</span>
+              </div>
+              <h3>Simple tracking and insights</h3>
+              <p>Log applications, update statuses, and see clear success rates and deadlines at a glance.</p>
+            </article>
+          </div>
+          <a class="cta" href="#">Join the waitlist</a>
+        </div>
+      </section>
+    </main>
+
+    <!-- Pricing -->
+    <section class="section container band pricing" id="pricing">
+      <div class="full">
+        <h2>Pricing</h2>
+        <p class="sub">Simple plans for every stage. Start free and grow when you’re ready.</p>
+
+        <div class="plans">
+          <!-- FREE -->
+          <article class="plan">
+            <header class="plan-head">
+              <h3>Free</h3>
+              <div class="sub-note">1 user</div>
+              <div class="price"><span class="currency">$</span><span class="amount">0</span><span class="per">/forever</span></div>
+            </header>
+            <ul class="features">
+              <li>One complete grant proposal</li>
+              <li>Download to any supported format</li>
+              <li>Edit, share and re‑export your proposal</li>
+              <li>Access the community forum</li>
+            </ul>
+            <a class="cta" href="#" aria-label="Get started with Free">Get started</a>
+          </article>
+
+          <!-- PRO -->
+          <article class="plan featured">
+            <header class="plan-head">
+              <div class="badge" aria-hidden="true">Most popular</div>
+              <h3>Pro</h3>
+              <div class="sub-note">1–10 users</div>
+              <div class="price"><span class="currency">$</span><span class="amount">20</span><span class="per">/user/month</span></div>
+            </header>
+            <ul class="features">
+              <li><strong>Everything in Free</strong> plus:</li>
+              <li>10 grant proposals per user per month</li>
+              <li>Access to all features, including trackers, notifications and grant matching</li>
+              <li>Support via live chat & tickets</li>
+              <li>Roles & access levels</li>
+            </ul>
+            <a class="cta accent" href="#" aria-label="Get Pro plan">Get Pro</a>
+          </article>
+
+          <!-- ENTERPRISE -->
+      <article class="plan enterprise">
+            <header class="plan-head">
+              <h3>Enterprise</h3>
+              <div class="sub-note">10+ users</div>
+  <div class="price alt"><span class="contact">Contact sales</span></div>
+            </header>
+            <ul class="features">
+              <li><strong>Everything in Pro</strong> plus:</li>
+              <li>Increased proposal limits</li>
+              <li>Expedited hands‑on support</li>
+              <li>Multiple organization admins</li>
+              <li>Early previews of new features</li>
+              <li>BYOK support</li>
+            </ul>
+            <a class="cta outline" href="#" aria-label="Contact sales">Contact sales</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <footer class="container foot">
+      <p>© <span id="year"></span> Granterstellar by <a href="https://intelfy.dk">intelfy</a>. All rights reserved. · <a href="privacy.html">Privacy</a></p>
+    </footer>
+
+  <script src="script.js" defer></script>
+  </body>
+  </html>
