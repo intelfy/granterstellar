@@ -17,7 +17,7 @@ This is the working README for the full application (SPA + API + DB), optimized 
 ## Technology stack
 - Backend: Django + DRF, Postgres, Redis, Celery (async jobs for AI/exports)
 - Frontend: React (Vite), SurveyJS
-- AI: Provider abstraction (OpenAI GPT-4o / Google Gemini); optional RAG store of templates/exemplars
+- AI: Provider abstraction (OpenAI GPT-5 / Google Gemini); optional RAG store of templates/exemplars
 - Payments: Stripe subscriptions + customer portal + webhooks
 - Exports: Markdown canonical → DOCX/PDF (pandoc/python-docx/weasyprint)
 - OCR: ocrmypdf + pytesseract

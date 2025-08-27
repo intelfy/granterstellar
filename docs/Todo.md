@@ -141,7 +141,7 @@ Exit criteria for this milestone: A self-hostable Docker Compose stack with a wo
     Security: JWT + role checks; idempotent webhooks; rate limiting on AI endpoints; file type/size validation.
 
 4) AI Providers and Abstractions
-- [ ] Provider abstraction (GPT-4o, Gemini; switch via env)
+- [ ] Provider abstraction (GPT-5, Gemini; switch via env)
 - [ ] Cost/latency logging per request
 - [ ] Safety filters (max tokens, rate limiting per plan)
 - [ ] Deterministic sampling settings for exports where possible
