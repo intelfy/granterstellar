@@ -1,0 +1,19 @@
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+
+# Env
+.env
+*.env
+.env.*
+
+# VCS
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea

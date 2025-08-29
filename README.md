@@ -1,128 +1,104 @@
-# Granterstellar — Stealth Landing
+# Granterstellar — Full App Guide · Coolify + Traefik
 
-Minimal, mobile‑first landing page with a waitlist form — self‑hosted Mailgun proxy.
+This README covers the full application (SPA + API + DB). For the docs index, see `docs/README.md`. For install and env details, see `docs/install_guide.md`.
 
-Note: For the full application (API + SPA + DB) with Coolify/Traefik deployment, see `docs/README-full-app.md` (skeleton; will replace this README when the stack is ready).
-___________________________
+## Overview
+- Product: Guided grant-writing SaaS with AI-assisted authoring, JSONB-backed proposal storage, and deterministic exports (md/docx/pdf).
+- Architecture: Monolith with React SPA and Django API; Postgres; optional Redis/Celery; deployed via Coolify behind Traefik.
+- Data: Identity/billing in relational tables; proposal content in JSONB; RLS enforced via DB session variables.
 
+## Repo layout
+- `api/` — Django project (accounts, orgs, proposals, billing, ai, exports, files)
+- `web/` — React SPA (Vite)
+- `api/Dockerfile` — API image (bundles SPA build + landing via WhiteNoise)
+- `docker-compose.yml` / `app-compose.yml` — local dev stacks
+- `docs/` — install guide, design rules, exports async, RLS notes
 
+## Technology
+- Backend: Django + DRF, Postgres, optional Celery/Redis
+- Frontend: React (Vite)
+- AI: Provider abstraction (GPT-5 plans/writes, Gemini formats/polishes)
+- Billing: Stripe subscriptions + bundles + customer portal/webhooks
+- Exports: Canonical Markdown → DOCX/PDF, deterministic outputs/checksums
+- OCR: PDFs via pdfminer; optional image OCR via pytesseract/PIL; optional PDF OCR via `ocrmypdf` (behind flags)
 
+## Deployment topology
+Single image recommended:
+- SPA routes under `/app`; SPA static assets under `/static/app`.
+- API serves landing at `/` and SPA index for `/app` routes; `/api/*` for API; static/media via WhiteNoise.
+- Optional host-aware redirect: requests to configured app hosts at `/` redirect to `/app` (set `APP_HOSTS` as a comma-separated list of hostnames).
 
+See `docs/install_guide.md` for CSP allow-lists, domains, and environment examples. Test domain: https://grants.intelfy.dk; projected production: https://forgranted.io. Analytics host: https://data.intelfy.dk.
 
+## Local development (no Docker)
+Use the included VS Code tasks:
+- API: “API: runserver (DEBUG)”
+- Web: “Web: dev”
+- Both: “Dev: API + Web”
+- Optional async: start Redis (e.g., brew) and run “API: celery worker”
+- Seed demo: “API: seed demo”
 
-Submit options
-- Mailgun (default): form posts to `/api/waitlist` handled by `server.mjs` which calls Mailgun (double opt‑in).
-- External endpoint (Formspree/etc.): set `data-endpoint` on the form to override.
+The SPA calls `/api` by default. When running API separately, set `VITE_API_BASE` to your API URL.
 
-Dev usage
-- Node (Mailgun proxy):
-	- copy `.env.example` to `.env` and set `MAILGUN_API_KEY`.
-	- defaults:
-		- MAILGUN_DOMAIN=mg.intelfy.dk
-		- MAILGUN_LIST=granterstellar@mg.intelfy.dk
-		- MAILGUN_API_HOST=api.mailgun.net (set to api.eu.mailgun.net for EU regions)
-		- PUBLIC_BASE_URL=http://localhost:5173
-	- run: `node server.mjs` then http://localhost:5173
-- Docker:
-	- `docker build -t granterstellar-landing .`
-	- `docker run -e MAILGUN_DOMAIN=mg.intelfy.dk -e MAILGUN_API_KEY=key-xxxx -e MAILGUN_LIST=granterstellar@mg.intelfy.dk -p 5173:5173 granterstellar-landing`
+## SPA routing and base paths
+- Asset base: `VITE_BASE_URL` (default `/static/app/`) controls where built assets are served.
+- Router base: `VITE_ROUTER_BASE` (default `/app`) controls the SPA route prefix.
+- During dev, refreshes at bare paths are auto-corrected to include the router base.
 
-Deploy
-- Self-host: run the Docker image with Mailgun env vars.
-- Compose: add this as a service in the main stack and route `/` to this service at your vanity domain.
-	- Quick start here:
-		- `cp .env.example .env && $EDITOR .env` # set MAILGUN_API_KEY and PUBLIC_BASE_URL
-		- `docker compose up --build -d`
-		- Health: GET http://localhost:5173/healthz returns `ok` when ready
+## Environment keys (high impact)
+- OAuth (Google): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OAUTH_REDIRECT_URI`, `GOOGLE_JWKS_URL`, `GOOGLE_ISSUER`
+- Core: `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `DATABASE_URL`, `PUBLIC_BASE_URL`
+- CORS/CSRF: `CORS_ALLOWED_ORIGINS`, `CORS_ALLOW_ALL`, `CSRF_TRUSTED_ORIGINS`
+- Async: `EXPORTS_ASYNC`, `AI_ASYNC`, `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`
+- SPA: `VITE_BASE_URL` (default `/static/app/`), `VITE_ROUTER_BASE` (default `/app`), `VITE_API_BASE`
+- Analytics: `VITE_UMAMI_WEBSITE_ID`, `VITE_UMAMI_SRC` (e.g., https://data.intelfy.dk/script.js)
+- Email: `INVITE_SENDER_DOMAIN`, SMTP vars, `FRONTEND_INVITE_URL_BASE` (use `https://<domain>/app`)
+- Billing: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, price IDs; `FAILED_PAYMENT_GRACE_DAYS`
+- Quotas: `QUOTA_FREE_ACTIVE_CAP`, `QUOTA_PRO_MONTHLY_CAP`, `QUOTA_PRO_PER_SEAT`, `QUOTA_ENTERPRISE_MONTHLY_CAP`
+- OCR: `OCR_IMAGE`, `OCR_PDF`
+- CSP: `CSP_SCRIPT_SRC`, `CSP_STYLE_SRC`, `CSP_CONNECT_SRC` (comma-separated; `'self'` auto-added)
+- Orgs/Invites: `ORG_INVITE_TTL_DAYS` (invite expiry, days), `ORG_INVITES_PER_HOUR` (per-org rate limit), `APP_HOSTS` (hosts where `/` redirects to `/app`).
 
-Traefik (Coolify) notes
-- Set PUBLIC_BASE_URL to your HTTPS domain (e.g., `https://landing.intelfy.dk`) so confirm links are correct.
-- Coolify usually handles Traefik config via its UI. If you need labels in compose, an example:
-	- `traefik.enable=true`
-	- `traefik.http.routers.landing.rule=Host(`landing.intelfy.dk`)`
-	- `traefik.http.routers.landing.entrypoints=websecure`
-	- `traefik.http.routers.landing.tls=true`
-	- `traefik.http.services.landing.loadbalancer.server.port=5173`
-	- `traefik.http.services.landing.loadbalancer.healthcheck.path=/healthz`
-	- `traefik.http.services.landing.loadbalancer.healthcheck.interval=10s`
+Environment variables — quick reference
+- APP_HOSTS: Comma‑separated hostnames where visiting `/` should 301‑redirect to the SPA at `/app`. Leave empty to serve the static landing at `/`. Example: `APP_HOSTS=forgranted.io`.
+- CSP_CONNECT_SRC: Extra hosts the browser may call via fetch/XHR/WebSockets. Needed for analytics collectors or third‑party APIs used from the SPA. Example: `CSP_CONNECT_SRC=https://analytics.example.com`.
+- VITE_BASE_URL / VITE_ROUTER_BASE: Keep defaults (`/static/app/` and `/app`) unless you customize CDN/routing.
+- FAILED_PAYMENT_GRACE_DAYS: Number of days Pro features remain available when Stripe marks a subscription `past_due`.
+- PRICE IDs: `PRICE_PRO_MONTHLY`, `PRICE_PRO_YEARLY`, `PRICE_ENTERPRISE_MONTHLY`, and optional bundles `PRICE_BUNDLE_1`, `PRICE_BUNDLE_10`, `PRICE_BUNDLE_25`.
+- JWT overrides: `JWT_ACCESS_MINUTES`, `JWT_REFRESH_DAYS`, `JWT_SIGNING_KEY`.
+- Upload constraints: `FILE_UPLOAD_MAX_MEMORY_SIZE`, `ALLOWED_UPLOAD_EXTENSIONS`.
+- DRF throttles: `DRF_THROTTLE_USER`, `DRF_THROTTLE_ANON`.
 
-Deploy on Coolify (DigitalOcean + Traefik)
-1) Prerequisites
-	- A domain/subdomain for the landing (e.g., `landing.intelfy.dk`).
-	- DNS: Create an A record pointing `landing.intelfy.dk` → your droplet IP.
-	- Mailgun: Domain `mg.intelfy.dk` verified with SPF/DKIM/DMARC; create a mailing list (e.g., `granterstellar@mg.intelfy.dk`); have your private API key.
-	- Lottie: Add `landing/vendor/lottie.min.js` and your JSON animations in `landing/animations/` before deploying (keeps CSP strict and assets local).
+See `.env.example` and `.env.coolify.example`.
 
-2) Add repository to Coolify
-	- Applications → New Application → Git Repository.
-	- Connect your Git provider and select this repo.
-	- Since this is a monorepo, configure build context/paths:
-	  - Build Type: Dockerfile (recommended) OR Docker Compose (alternative).
-	  - If Dockerfile:
-		 - Dockerfile Path: `landing/Dockerfile`
-		 - Build Context: project root (Coolify will send the whole repo; Dockerfile copies `landing/`).
-	  - If Docker Compose:
-		 - Compose Path: `landing/docker-compose.yml`
+## CI, tests, and lint
+- API: run Django tests per app (e.g., `python manage.py test -v 2 accounts`); determinism tests verify exports.
+- Web: ESLint (flat config) and Vitest.
+- Build hardening: no source maps in prod; console/debugger stripped; CSP enforced.
 
-3) Service configuration
-	- Internal port: 5173 (the server listens on 5173).
-	- Healthcheck: GET `/healthz` should return `ok`.
-	- Resources: default is fine (Node static + small proxy to Mailgun).
+## Notes
+- Design: keep markup minimal; avoid inline styles (see `docs/design_system.md`).
+- RLS: Postgres row policies tested; middleware sets session GUCs.
+- Optional legacy landing: if you need a separate marketing-only landing, see `docs/install_guide.md` (optional step).
 
-4) Environment variables (Secrets → Environment)
-	- MAILGUN_DOMAIN: `mg.intelfy.dk`
-	- MAILGUN_API_KEY: your Mailgun private API key
-	- MAILGUN_API_HOST: `api.mailgun.net` or `api.eu.mailgun.net` depending on your Mailgun region
-	- MAILGUN_LIST: `granterstellar@mg.intelfy.dk`
-	- PUBLIC_BASE_URL: `https://landing.intelfy.dk` (or your chosen domain)
+## Landing server (static) — HTTPS and throttling
+The small Node landing server (`server.mjs`) serves the static landing and waitlist endpoint when used standalone. In production it typically sits behind Traefik/Coolify with TLS termination. If you run it directly, you can enable HTTPS and tune resource guards:
 
-5) Domain & TLS (Traefik)
-	- In the Coolify application → Domains → Add Domain: `landing.intelfy.dk`.
-	- Enable HTTPS/Let’s Encrypt. Traefik will route traffic to the container on port 5173.
+- ENABLE_HTTPS=1: Start HTTPS when key/cert paths are provided.
+- HTTPS_KEY_PATH, HTTPS_CERT_PATH: File paths to your TLS key and certificate.
+- STATIC_FS_CONCURRENCY: Max concurrent static file streams (default 50).
+- STATIC_RATE_LIMIT_MAX: Per‑IP GET/HEAD rate limit window cap (default 300 per 5 minutes).
 
-6) Deploy
-	- Click Deploy. Wait for build logs to finish and healthcheck to pass.
-	- Verify: open `https://landing.intelfy.dk/healthz` → `ok`.
+Example (local self‑signed certs):
 
-7) Post‑deploy checks
-	- Visit the landing root and try the waitlist form with a test email.
-	- Confirm you receive a confirmation email; the link should point to `PUBLIC_BASE_URL` → `/confirm?...` and render the confirmation page.
-	- Verify robots at `/robots.txt` disallows indexing (stealth mode).
+```
+ENABLE_HTTPS=1 \
+HTTPS_KEY_PATH=./local.key \
+HTTPS_CERT_PATH=./local.crt \
+STATIC_FS_CONCURRENCY=100 \
+node server.mjs
+```
 
-8) Updating animations/content
-	- Commit new animations into `landing/animations/` (matching the `data-animation` filenames in `index.html`).
-	- If you replace lottie-web, update `landing/vendor/lottie.min.js`.
-	- Redeploy from Coolify.
-
-9) Rollbacks & redeploys
-	- Coolify: select a previous deployment and roll back, or redeploy latest commit after edits.
-
-10) Troubleshooting
-	- 4xx on `/api/waitlist`: confirm MAILGUN_* envs are set and list exists.
-	- No confirmation email: check Mailgun logs; ensure `PUBLIC_BASE_URL` is the HTTPS domain and DNS for `mg.intelfy.dk` is verified.
-	- Animations not playing: ensure `vendor/lottie.min.js` and the referenced JSON files exist on disk post‑deploy.
-
-Env vars
-- MAILGUN_DOMAIN: your Mailgun domain (e.g., mg.intelfy.dk)
-- MAILGUN_API_KEY: your Mailgun private API key
-- MAILGUN_API_HOST: Mailgun API host; use `api.mailgun.net` (US) or `api.eu.mailgun.net` (EU)
-- MAILGUN_LIST: Mailgun mailing list address (e.g., granterstellar@mg.intelfy.dk). Required for double opt‑in.
-- PUBLIC_BASE_URL: base URL used to build confirmation links for double opt‑in.
-
-Security & compliance
-- Honeypot: hidden text field `hp`; bots get a 200 w/o adding.
-- Rate limit: in‑memory, 10 requests / 5 minutes / IP.
-- Double opt‑in: list member is created unsubscribed with a token; a confirmation email is sent with a link to `/confirm`; upon success, `subscribed=yes`.
-- Security headers: HSTS, CSP (self only), Referrer-Policy, X-Content-Type-Options, X-Frame-Options, Permissions-Policy, COOP/CORP.
-- robots: `robots.txt` disallows indexing (stealth mode).
-
-Illustrations & Lottie
-- Place a local copy of lottie-web (UMD) at `landing/vendor/lottie.min.js`.
-- Put animation JSON files under `landing/animations/` and reference filenames via `data-animation` on `.lottie-slot` elements.
-- The page lazily loads `vendor/lottie.min.js` and hydrates animations when the slot scrolls into view.
-- CSP stays strict (self only) because assets are served locally; no external CDNs.
-
-Notes
-- JS uses fetch POST /api/waitlist with `{ email }` JSON.
-- Basic client+server validation and friendly messages.
-- Styles are custom, no framework, optimized for mobile first.
+Notes:
+- When running behind Traefik, leave HTTP mode; TLS is terminated at the proxy. Security headers and CSP are still set by the server.
+- Umami analytics injection is strictly validated: src must be https and end with `/script.js`, and website id is attribute‑escaped.

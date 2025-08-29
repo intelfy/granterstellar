@@ -1,0 +1,14 @@
+version: '3.9'
+services:
+  api:
+    environment:
+      DEBUG: '1'
+      ALLOWED_HOSTS: localhost,127.0.0.1
+    ports:
+      - "8000:8000"
+  web:
+    ports:
+      - "5174:5174"
+  db:
+    ports:
+      - "5432:5432"

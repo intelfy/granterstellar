@@ -1,0 +1,62 @@
+name: Hardening Checks
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  web-dist-safety:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci || npm install --no-audit --no-fund
+      - run: npm run build
+      - name: Assert no source maps
+        run: |
+          if ls dist/**/*.map 1> /dev/null 2>&1; then echo "Source maps found" && exit 1; else echo "No source maps"; fi
+      - name: Assert no console statements in dist
+        run: |
+          if grep -R "console\." dist/ | grep -v -E "console\.(timeEnd|info)" 1> /dev/null 2>&1; then \
+            echo "console statements found" && exit 1; else echo "No console statements"; fi
+
+  docker-ignore-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify .dockerignore excludes docs/tests
+        run: |
+          grep -q "\*\*/\*.md" .dockerignore || (echo "Missing *.md exclusion" && exit 1)
+          grep -q "\*\*/tests\*\*/\*\*" .dockerignore || echo "Note: tests exclusion is covered via multiple patterns"
+
+  image-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build API image
+        run: |
+          docker build -f api/Dockerfile -t app-api:ci .
+      - name: Build root (landing) image
+        run: |
+          docker build -f Dockerfile -t app-web:ci .
+      - name: Audit API image contents
+        run: |
+          docker run --rm app-api:ci /bin/sh -lc "\
+            if find / -type f -name '*.md' | grep -q .; then echo 'MD files found' && exit 1; fi; \
+            if find / -type f -path '*/tests/*' | grep -q .; then echo 'tests found' && exit 1; fi; \
+            if find / -type f -name '*.map' | grep -q .; then echo 'source maps found' && exit 1; fi; \
+            echo OK"
+      - name: Audit Web image contents
+        run: |
+          docker run --rm app-web:ci /bin/sh -lc "\
+            if find / -type f -name '*.md' | grep -q .; then echo 'MD files found' && exit 1; fi; \
+            if find / -type f -path '*/__tests__/*' | grep -q .; then echo '__tests__ found' && exit 1; fi; \
+            if find / -type f -name '*.map' | grep -q .; then echo 'source maps found' && exit 1; fi; \
+            echo OK"

@@ -84,11 +84,11 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
           // Load lottie-web if not already loaded
           if (!window.lottie) {
-            await loadScript('/vendor/lottie.min.js');
+            await loadScript('/static/vendor/lottie.min.js');
           }
           const file = el.getAttribute('data-animation');
           if (!file) continue;
-          const path = `/animations/${file}`;
+          const path = `/static/animations/${file}`;
           window.lottie.loadAnimation({
             container: el,
             renderer: 'svg',

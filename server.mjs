@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 import http from 'node:http';
 import https from 'node:https';
+import crypto from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
-import { extname, join, normalize } from 'node:path';
+import { createReadStream, readFileSync } from 'node:fs';
+import { extname, join, normalize, resolve } from 'node:path';
 import { URL } from 'node:url';
 
 const ROOT = new URL('.', import.meta.url).pathname;
-// Load .env (no deps) if present
+// Load .env for local dev only (NODE_ENV !== 'production')
 async function loadDotEnv() {
   try {
+    if (process.env.NODE_ENV === 'production') return;
     const envPath = join(ROOT, '.env');
     const txt = await readFile(envPath, 'utf-8');
     for (const line of txt.split(/\r?\n/)) {
@@ -17,7 +19,7 @@ async function loadDotEnv() {
       const idx = line.indexOf('=');
       if (idx === -1) continue;
       const key = line.slice(0, idx).trim();
-      const val = line.slice(idx + 1).trim().replace(/^"|"$/g, '');
+      const val = line.slice(idx + 1).trim().replace(/^\"|\"$/g, '');
       if (!(key in process.env)) process.env[key] = val;
     }
   } catch {}
@@ -30,6 +32,39 @@ const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || '';
 const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY || '';
 const MAILGUN_LIST = process.env.MAILGUN_LIST || ''; // e.g., waitlist@mg.example.com
 const MAILGUN_API_HOST = process.env.MAILGUN_API_HOST || 'api.mailgun.net'; // set to api.eu.mailgun.net for EU regions
+const UMAMI_SRC = process.env.VITE_UMAMI_SRC || '';
+const UMAMI_WEBSITE_ID = process.env.VITE_UMAMI_WEBSITE_ID || '';
+
+// Strictly validate Umami script URL: require https and /script.js path
+function parseUmami(u) {
+  try {
+    if (!u) return null;
+    const url = new URL(u);
+    if (url.protocol !== 'https:') return null;
+    if (!/\/script\.js$/i.test(url.pathname)) return null;
+    return { src: url.toString(), origin: url.origin };
+  } catch {
+    return null;
+  }
+}
+const UMAMI = parseUmami(UMAMI_SRC);
+
+// Strictly validate the website id (UUID-ish) to avoid attribute injection
+function safeWebsiteId(id) {
+  const s = String(id || '').trim();
+  // Accept UUID v4 or a 32-36 char hex/hyphen token
+  if (/^[0-9a-fA-F-]{32,36}$/.test(s)) return s;
+  return '';
+}
+
+function escapeAttr(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
 
 
 const CONTENT_TYPES = {
@@ -87,11 +122,10 @@ async function addToMailingList(email, opts = {}) {
       const chunks = [];
       res.on('data', (d) => chunks.push(d));
       res.on('end', () => {
-        const body = Buffer.concat(chunks).toString('utf-8');
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-          resolve({ ok: true, status: res.statusCode, body });
+          resolve({ ok: true, status: res.statusCode });
         } else {
-          reject(new Error(`Mailgun error ${res.statusCode}: ${body}`));
+          reject(new Error(`Mailgun error ${res.statusCode}`));
         }
       });
     });
@@ -101,22 +135,32 @@ async function addToMailingList(email, opts = {}) {
   });
 }
 
-function serveFile(req, res, filePath) {
+function serveFile(req, res, filePath, onDone) {
   const ext = extname(filePath);
   const type = CONTENT_TYPES[ext] || 'application/octet-stream';
-  createReadStream(filePath)
-    .on('error', () => sendJson(res, 404, { error: 'Not found' }))
+  const stream = createReadStream(filePath)
+    .on('error', (err) => {
+      try { onDone && onDone(); } catch {}
+      return sendJson(res, 404, { error: 'Not found' })
+    })
     .once('open', () => {
       setSecurityHeaders(res);
       res.writeHead(200, { 'Content-Type': type });
     })
     .pipe(res);
+  const finalize = () => { try { onDone && onDone(); } catch {} };
+  stream.on('close', finalize);
+  res.on('close', finalize);
 }
 
 // Simple in-memory rate limit: max N per IP per window
 const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
-const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_MAX = 10; // strict for POST /api/waitlist
 const RATE = new Map(); // ip -> [timestamps]
+
+// Permissive per-IP limiter for static file GET/HEAD handling
+const STATIC_RATE_LIMIT_MAX = Number(process.env.STATIC_RATE_LIMIT_MAX || 300);
+const RATE_STATIC = new Map(); // ip -> [timestamps]
 
 function checkRate(ip) {
   const now = Date.now();
@@ -128,14 +172,33 @@ function checkRate(ip) {
   return true;
 }
 
+function checkRateStatic(ip) {
+  const now = Date.now();
+  const arr = RATE_STATIC.get(ip) || [];
+  const recent = arr.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (recent.length >= STATIC_RATE_LIMIT_MAX) return false;
+  recent.push(now);
+  RATE_STATIC.set(ip, recent);
+  return true;
+}
+
 async function handle(req, res) {
-  const url = new URL(req.url, `http://${req.headers.host}`);
+  // Avoid trusting Host header blindly. Use configured PUBLIC_BASE_URL origin when valid, else localhost.
+  const origin = safePublicBaseUrl(process.env.PUBLIC_BASE_URL) || `http://localhost:${PORT}`;
+  const url = new URL(req.url, origin);
 
   if (req.method === 'POST' && url.pathname === '/api/waitlist') {
     const ip = req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
     if (!checkRate(ip)) return sendJson(res, 429, { error: 'Too many requests' });
     let body = '';
-    req.on('data', (chunk) => (body += chunk));
+    req.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > 10 * 1024) { // 10KB limit
+        res.writeHead(413, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'Payload too large' }));
+        try { req.destroy(); } catch {}
+      }
+    });
   req.on('end', async () => {
       try {
         const data = JSON.parse(body || '{}');
@@ -146,8 +209,9 @@ async function handle(req, res) {
           return sendJson(res, 400, { error: 'Invalid email' });
         }
         // Double opt-in: add as unsubscribed with a token and send confirmation email with link
-        const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-        const confirmBase = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
+  // Stronger token (random UUID-ish string)
+  const token = cryptoRandom();
+  const confirmBase = safePublicBaseUrl(process.env.PUBLIC_BASE_URL) || `http://localhost:${PORT}`;
         const confirmLink = `${confirmBase}/confirm?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
 
         // Store token in Mailgun member vars; member is unsubscribed (no)
@@ -157,7 +221,7 @@ async function handle(req, res) {
         await sendMail(email, 'Confirm your Granterstellar waitlist subscription', `Please confirm your email by visiting: ${confirmLink}\n\nIf you didn't request this, ignore this email.`);
         return sendJson(res, 200, { ok: true, pending: true });
       } catch (e) {
-        console.error('[waitlist] Error handling request:', e?.message || e, e?.stack || '');
+        logError('[waitlist] Error handling request', e);
         return sendJson(res, 500, { error: 'Server error' });
       }
     });
@@ -179,7 +243,7 @@ async function handle(req, res) {
       }
       return sendJson(res, 400, { error: 'Invalid token' });
     } catch (e) {
-      console.error('[confirm] Error confirming subscription:', e?.message || e, e?.stack || '');
+      logError('[confirm] Error confirming subscription', e);
       return sendJson(res, 500, { error: 'Server error' });
     }
   }
@@ -209,30 +273,98 @@ async function handle(req, res) {
   // static files
   let pathname = url.pathname;
   if (pathname === '/') pathname = '/index.html';
-  const local = join(ROOT, normalize(pathname.replace(/^\/+/, '')));
+  // Apply a permissive rate limit for static file requests
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    const ip = req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+    if (!checkRateStatic(ip)) {
+      return sendJson(res, 429, { error: 'Too many requests' });
+    }
+  }
+  const local = safeLocalPath(pathname);
+  // Lightweight FS concurrency guard to reduce resource exhaustion risk
+  const MAX_FS_CONCURRENCY = Number(process.env.STATIC_FS_CONCURRENCY || 50);
+  globalThis.__fsInflight = globalThis.__fsInflight || 0;
+  const acquireFsSlot = () => {
+    if (globalThis.__fsInflight >= MAX_FS_CONCURRENCY) return false;
+    globalThis.__fsInflight += 1; return true;
+  };
+  const releaseFsSlot = () => { globalThis.__fsInflight = Math.max(0, (globalThis.__fsInflight || 0) - 1); };
+  if (!acquireFsSlot()) return sendJson(res, 503, { error: 'Busy, try again' });
   try {
     await stat(local);
-    return serveFile(req, res, local);
+    // Inject Umami into landing index.html when configured
+  if (local.endsWith('/index.html') && UMAMI) {
+      try {
+        let html = await readFile(local, 'utf-8');
+        if (html) {
+          const websiteId = safeWebsiteId(UMAMI_WEBSITE_ID);
+          // Skip injection if website id isn't valid
+          if (!websiteId) {
+            setSecurityHeaders(res);
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            const out = res.end(html);
+            releaseFsSlot();
+            return out;
+          }
+          const marker = '</head>';
+      const tag = `\n  <script async src="${UMAMI.src}" data-website-id="${escapeAttr(websiteId)}"></script>\n`;
+          if (!html.includes('data-website-id')) {
+            html = html.replace(marker, `${tag}${marker}`);
+          }
+          setSecurityHeaders(res);
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          const out = res.end(html);
+          releaseFsSlot();
+          return out;
+        }
+      } catch {}
+    }
+    return serveFile(req, res, local, releaseFsSlot);
   } catch {
+    releaseFsSlot();
     return sendJson(res, 404, { error: 'Not found' });
   }
 }
 
-http.createServer(handle).listen(PORT, () => {
-  console.log(`Landing server running on http://localhost:${PORT}`);
-});
+// Prefer HTTPS when cert/key provided (useful outside Traefik). Otherwise bind HTTP (dev/local).
+const HTTPS_KEY_PATH = process.env.HTTPS_KEY_PATH;
+const HTTPS_CERT_PATH = process.env.HTTPS_CERT_PATH;
+if (process.env.ENABLE_HTTPS === '1' && HTTPS_KEY_PATH && HTTPS_CERT_PATH) {
+  try {
+    const key = readFileSync(HTTPS_KEY_PATH);
+    const cert = readFileSync(HTTPS_CERT_PATH);
+    https.createServer({ key, cert }, handle).listen(PORT, () => {
+      console.log(`Landing server running (HTTPS) on port ${PORT}`);
+    });
+  } catch (e) {
+    console.error('Failed to start HTTPS server, falling back to HTTP:', e && e.message);
+    http.createServer(handle).listen(PORT, () => {
+      console.log(`Landing server running on http://localhost:${PORT}`);
+    });
+  }
+} else {
+  // Note: HTTPS is terminated by Traefik/Coolify in deployment.
+  http.createServer(handle).listen(PORT, () => {
+    console.log(`Landing server running on http://localhost:${PORT}`);
+  });
+}
 
 function setSecurityHeaders(res) {
   // HSTS (browsers ignore HSTS on localhost)
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   // CSP: tight by default. Adjust if adding analytics or external assets.
+  const umamiOrigin = UMAMI?.origin || '';
+  const scriptSrc = ["'self'"].concat(umamiOrigin ? [umamiOrigin] : []);
+  const connectSrc = ["'self'"].concat(umamiOrigin ? [umamiOrigin] : []);
   const csp = [
     "default-src 'self'",
-    "script-src 'self'",
+    `script-src ${scriptSrc.join(' ')}`,
     "style-src 'self'",
+    "object-src 'none'",
+    "frame-src 'none'",
     "img-src 'self' data:",
     "font-src 'self'",
-    "connect-src 'self'",
+    `connect-src ${connectSrc.join(' ')}`,
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
@@ -268,7 +400,7 @@ async function sendMail(to, subject, text) {
   };
   await new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
-      res.on('data', () => {});
+  res.on('data', () => {});
       res.on('end', resolve);
     });
     req.on('error', reject);
@@ -320,4 +452,38 @@ async function confirmMember(email, token) {
     req.end();
   });
   return true;
+}
+
+function safeLocalPath(requestPath) {
+  // Normalize and resolve against ROOT, then ensure it stays under ROOT
+  const normalized = normalize(requestPath);
+  const full = resolve(ROOT, '.' + normalized);
+  if (!full.startsWith(resolve(ROOT))) {
+    return resolve(ROOT, 'index.html');
+  }
+  return full;
+}
+
+function cryptoRandom() {
+  // Prefer crypto.randomUUID if available, else fallback to crypto.getRandomValues
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID().replace(/-/g, '');
+  return crypto.randomBytes(16).toString('hex');
+}
+
+function safePublicBaseUrl(u) {
+  try {
+    if (!u) return '';
+    const parsed = new URL(u);
+    if (parsed.protocol !== 'https:') return '';
+    return parsed.origin;
+  } catch { return ''; }
+}
+
+function logError(prefix, err) {
+  const msg = (err && err.message) ? err.message : String(err || 'unknown');
+  if (process.env.NODE_ENV === 'production') {
+    console.error(prefix + ':', msg);
+  } else {
+    console.error(prefix + ':', msg, err?.stack || '');
+  }
 }

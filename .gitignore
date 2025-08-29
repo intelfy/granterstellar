@@ -7,3 +7,8 @@ node_modules/
 
 # Mac
 .DS_Store
+
+# Local DB and generated media
+api/db.sqlite3
+api/db.sqlite3
+api/media/

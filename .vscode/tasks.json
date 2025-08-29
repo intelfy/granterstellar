@@ -1,0 +1,152 @@
+{
+  // VS Code tasks to streamline local dev
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "API: migrate",
+      "type": "shell",
+      "command": "cd api && DEBUG=1 SECRET_KEY=test .venv/bin/python manage.py migrate",
+      "group": "build",
+      "problemMatcher": ["$python"]
+    },
+    {
+      "label": "API: lint (ruff)",
+      "type": "shell",
+      "command": "cd api && .venv/bin/ruff check .",
+      "group": "test",
+      "problemMatcher": [
+        {
+          "owner": "ruff",
+          "fileLocation": ["relative", "${workspaceFolder}"],
+          "pattern": {
+            "regexp": "^(.*?):(\\d+):(\\d+): (.*)$",
+            "file": 1,
+            "line": 2,
+            "column": 3,
+            "message": 4
+          }
+        }
+      ]
+    },
+    {
+      "label": "API: format (ruff)",
+      "type": "shell",
+      "command": "cd api && .venv/bin/ruff format",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "API: runserver (DEBUG)",
+      "type": "shell",
+      "command": "cd api && DEBUG=1 SECRET_KEY=test .venv/bin/python manage.py runserver 127.0.0.1:8000",
+      "group": "build",
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "owner": "python",
+          "pattern": {
+            "regexp": ".*",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": ".*Starting development server.*",
+            "endsPattern": ".*Starting development server.*"
+          }
+        }
+      ]
+    },
+    {
+      "label": "API: test (accounts+billing+exports)",
+      "type": "shell",
+  "command": "cd api && DEBUG=1 SECRET_KEY=test .venv/bin/python manage.py test -v 2 accounts.tests.test_health billing.tests.test_quota billing.tests.test_usage billing.tests.test_webhooks exports.tests.test_determinism orgs.tests.test_invites billing.tests.test_seats billing.tests.test_bundles_and_seats billing.tests.test_enterprise_allocations billing.tests.test_portal",
+      "group": "test",
+      "problemMatcher": ["$python"]
+    },
+    {
+      "label": "Web: lint",
+      "type": "shell",
+      "command": "cd web && npm run lint",
+      "group": "test",
+      "problemMatcher": [
+        {
+          "owner": "eslint",
+          "fileLocation": ["relative", "${workspaceFolder}"],
+          "pattern": {
+            "regexp": "^(.*?): line (\\d+), col (\\d+), (.*)$",
+            "file": 1,
+            "line": 2,
+            "column": 3,
+            "message": 4
+          }
+        }
+      ]
+    },
+    {
+      "label": "Web: dev",
+      "type": "shell",
+      "command": "cd web && npm run dev",
+      "group": "build",
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "owner": "vite",
+          "pattern": {
+            "regexp": ".*",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": ".*Local:.*http://.*",
+            "endsPattern": ".*ready in .*"
+          }
+        }
+      ]
+    },
+    {
+      "label": "API: celery worker",
+      "type": "shell",
+      "command": "cd api && EXPORTS_ASYNC=1 CELERY_BROKER_URL=redis://localhost:6379/0 CELERY_RESULT_BACKEND=redis://localhost:6379/1 .venv/bin/celery -A app.celery:app worker -l info",
+      "group": "build",
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "owner": "celery",
+          "pattern": {
+            "regexp": ".*",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": ".*\\[tasks\\].*",
+            "endsPattern": ".*ready\\..*"
+          }
+        }
+      ]
+    },
+    {
+      "label": "API: seed demo",
+      "type": "shell",
+      "command": "cd api && DEBUG=1 SECRET_KEY=test .venv/bin/python manage.py seed_demo",
+      "group": "none",
+      "problemMatcher": []
+    },
+    {
+      "label": "Dev: API + Web",
+      "type": "shell",
+      "command": "echo Starting API and Web...",
+      "dependsOn": [
+        "API: migrate",
+        "API: runserver (DEBUG)",
+        "Web: dev"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

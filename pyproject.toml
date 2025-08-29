@@ -1,0 +1,25 @@
+[tool.ruff]
+line-length = 130
+
+[tool.ruff.lint]
+select = ["E", "F", "UP", "B"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"api/**/migrations/*.py" = ["E501"]
+"**/migrations/*.py" = ["E501"]
+"**/tests/*.py" = ["E501", "I001"]
+"api/app/settings.py" = ["E501", "E402"]
+"api/billing/views.py" = ["E501"]
+"api/billing/webhooks.py" = ["E501"]
+"api/orgs/views.py" = ["E501"]
+"api/orgs/tests/test_invites.py" = ["E702"]
+"api/proposals/models.py" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+line-ending = "lf"
