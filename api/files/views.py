@@ -12,6 +12,8 @@ import mimetypes
 import shutil
 import subprocess
 import tempfile
+from shlex import split as shlex_split
+from django.core.exceptions import SuspiciousOperation
 
 def _ocr_image_if_enabled(path: str, content_type: str) -> str:
     """Optional OCR for images when OCR_IMAGE=1 and pytesseract/PIL are available.
@@ -109,6 +111,8 @@ def _has_signature(path: str, ext: str) -> bool:
 
 
 ALLOWED = set(settings.ALLOWED_UPLOAD_EXTENSIONS)
+MAX_BYTES = int(getattr(settings, 'FILE_UPLOAD_MAX_BYTES', getattr(settings, 'FILE_UPLOAD_MAX_MEMORY_SIZE', 10 * 1024 * 1024)))
+TEXT_MAX = int(getattr(settings, 'TEXT_EXTRACTION_MAX_BYTES', 8 * 1024 * 1024))
 
 def _is_under_media_root(p: str) -> bool:
     """Return True if p is a regular file under MEDIA_ROOT (no symlinks).
@@ -137,7 +141,7 @@ def _extract_text_stub(path: str, content_type: str) -> str:
     if content_type in ('text/plain',):
         try:
             with _safe_open_for_read(path) as f:
-                data = f.read(50000)
+                data = f.read(min(50000, TEXT_MAX))
                 try:
                     return data.decode('utf-8', errors='ignore')
                 except Exception:
@@ -163,6 +167,9 @@ def _extract_text_stub(path: str, content_type: str) -> str:
     ):
         try:
             from docx import Document  # type: ignore
+            # Avoid parsing extremely large documents
+            if os.path.getsize(path) > TEXT_MAX:
+                return ''
             doc = Document(path)
             parts = []
             for p in doc.paragraphs:
@@ -196,10 +203,11 @@ def upload(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
     size = getattr(f, 'size', 0)
-    if size and size > settings.FILE_UPLOAD_MAX_MEMORY_SIZE:
+    # Enforce hard cap
+    if size and size > MAX_BYTES:
         return Response(
-            {"error": "file_too_large", "limit": settings.FILE_UPLOAD_MAX_MEMORY_SIZE},
-            status=status.HTTP_400_BAD_REQUEST,
+            {"error": "file_too_large", "limit": MAX_BYTES},
+            status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )
 
     upload = FileUpload.objects.create(
@@ -233,12 +241,73 @@ def upload(request):
     if ext in { 'png', 'jpg', 'jpeg', 'pdf', 'docx' } and not _has_signature(fpath, ext):
         upload.delete()
         return Response({"error": "mismatched_signature"}, status=status.HTTP_400_BAD_REQUEST)
+    # Optional virus scan hook
+    try:
+        cmd_tpl = getattr(settings, 'VIRUSSCAN_CMD', '')
+        if cmd_tpl:
+            # Build argv safely without shell. Allow basic pattern: "scanner [args...] {path}".
+            # Reject if command contains suspicious characters that imply shell features.
+            if any(c in cmd_tpl for c in ['|', ';', '&', '>', '<', '`']):
+                raise ValueError('invalid scanner command')
+            parts = shlex_split(cmd_tpl)
+            if not parts:
+                raise ValueError('invalid scanner command')
+            # Disallow passing user-controlled path placeholders or redirection-like args
+            for a in parts[1:]:
+                if a.startswith('-') and any(tok in a for tok in ['-exec', '--exec', '-format=sh']):
+                    raise SuspiciousOperation('disallowed scanner argument')
+            # Only allow calling a binary by name or absolute path; no directory traversal in args
+            scanner = parts[0]
+            allowed_bins = set(getattr(settings, 'VIRUSSCAN_ALLOWED_BINARIES', []))
+            # If a path is provided, require absolute and optionally allow-list
+            if '/' in scanner:
+                if not os.path.isabs(scanner):
+                    raise SuspiciousOperation('scanner must be absolute path')
+                if allowed_bins and scanner not in allowed_bins:
+                    raise SuspiciousOperation('scanner not allowed')
+                if not os.path.exists(scanner):
+                    raise ValueError('scanner not found')
+            else:
+                # Bare command name: ensure allowed and resolve with which()
+                if allowed_bins and scanner not in allowed_bins:
+                    raise SuspiciousOperation('scanner not allowed')
+                resolved = shutil.which(scanner)
+                if not resolved:
+                    raise ValueError('scanner not found')
+                parts[0] = resolved
+            # Append the scanned file path as the last argv element
+            argv = parts + [fpath]
+            # Execute without a shell to avoid injection; argv only
+            proc = subprocess.run(
+                argv,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=max(1, int(getattr(settings, 'VIRUSSCAN_TIMEOUT_SECONDS', 10))),
+                check=False,
+                shell=False,
+            )
+            # Exit code 0 => clean; non-zero => infected or error
+            if proc.returncode != 0:
+                upload.delete()
+                return Response({"error": "infected"}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception:
+        # Fail-closed on scanner invocation errors
+        try:
+            upload.delete()
+        except Exception:
+            pass
+        return Response({"error": "scan_error"}, status=status.HTTP_400_BAD_REQUEST)
+
     # Best-effort OCR/parse stub
     # Only attempt text/OCR extraction for safely stored paths
-    upload.ocr_text = _extract_text_stub(fpath, upload.content_type) if _is_under_media_root(fpath) else ''
+    # Skip extraction if file exceeds configured TEXT_MAX to avoid heavy work
+    if os.path.getsize(fpath) <= TEXT_MAX:
+        upload.ocr_text = _extract_text_stub(fpath, upload.content_type) if _is_under_media_root(fpath) else ''
+    else:
+        upload.ocr_text = ''
     upload.save(update_fields=['ocr_text'])
     return Response({
-        "id": upload.id,
+        "id": upload.pk,
         "url": f"{settings.MEDIA_URL}{upload.file.name}",
         "content_type": upload.content_type,
         "size": upload.size,

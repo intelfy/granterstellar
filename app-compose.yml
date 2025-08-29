@@ -38,7 +38,8 @@ services:
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
       EXPORTS_ASYNC: ${EXPORTS_ASYNC}
     volumes:
-      - media:/app/media
+  - media:/app/media
+  - backups:/backups
     ports:
       - "8000:8000"
     depends_on:
@@ -95,6 +96,19 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
+  backup:
+    image: alpine:3.20
+    # Install postgresql-client and run daily dump to /backups
+    entrypoint: sh -c "apk add --no-cache postgresql15-client >/dev/null && sleep 10 && while true; do /app/scripts/pg_dump_daily.sh; sleep 86400; done"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    volumes:
+      - backups:/backups
+      - .:/app:ro
+    depends_on:
+      db:
+        condition: service_healthy
 volumes:
   db-data:
   media:
+  backups:

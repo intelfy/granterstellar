@@ -117,6 +117,8 @@ SECURE_REFERRER_POLICY = os.getenv('SECURE_REFERRER_POLICY', 'strict-origin-when
 CSP_SCRIPT_SRC = [o for o in os.getenv('CSP_SCRIPT_SRC', '').split(',') if o]
 CSP_STYLE_SRC = [o for o in os.getenv('CSP_STYLE_SRC', '').split(',') if o]
 CSP_CONNECT_SRC = [o for o in os.getenv('CSP_CONNECT_SRC', '').split(',') if o]
+# Optional escape hatch to allow inline styles in CSP (not recommended). Default False.
+CSP_ALLOW_INLINE_STYLES = os.getenv('CSP_ALLOW_INLINE_STYLES', '0') == '1'
 
 # Optional list of hostnames that should default to the SPA (e.g., app.<domain>)
 APP_HOSTS = [h.strip() for h in os.getenv('APP_HOSTS', '').split(',') if h.strip()]
@@ -175,6 +177,14 @@ else:
 
 # File uploads
 FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('FILE_UPLOAD_MAX_MEMORY_SIZE', str(10 * 1024 * 1024)))  # 10 MB default
+# Hard cap for uploaded file size (in bytes). If not set, defaults to FILE_UPLOAD_MAX_MEMORY_SIZE
+FILE_UPLOAD_MAX_BYTES = int(os.getenv('FILE_UPLOAD_MAX_BYTES', str(FILE_UPLOAD_MAX_MEMORY_SIZE)))
+# Max bytes to attempt best-effort text/OCR extraction; larger files will skip extraction for safety.
+TEXT_EXTRACTION_MAX_BYTES = int(os.getenv('TEXT_EXTRACTION_MAX_BYTES', str(8 * 1024 * 1024)))  # 8 MB default
+# Optional virus scan hook. If set, the command is executed against the file path.
+# Use a template with {path} placeholder or a plain command to which the path will be appended.
+VIRUSSCAN_CMD = os.getenv('VIRUSSCAN_CMD', '').strip()
+VIRUSSCAN_TIMEOUT_SECONDS = int(os.getenv('VIRUSSCAN_TIMEOUT_SECONDS', '10'))
 ALLOWED_UPLOAD_EXTENSIONS = [
     ext.strip().lower() for ext in os.getenv(
         'ALLOWED_UPLOAD_EXTENSIONS', 'pdf,png,jpg,jpeg,docx,txt'

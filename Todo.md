@@ -14,16 +14,25 @@ Legend: [x] done, [ ] todo, [~] in progress
     - Failed payment grace window honored for past_due via FAILED_PAYMENT_GRACE_DAYS (default 3). 
 - AI: provider abstraction in place; composite provider routes GPT-5 (plan/write) and Gemini (revise/final format). New `/api/ai/format` endpoint added and wired in SPA to run only after all sections are approved.
     - Providers now include a deterministic file_refs context block in outputs (when provided); unit tests added.
-- Files: optional image OCR via pytesseract behind feature flag; existing txt/docx extraction; optional PDF OCR via `ocrmypdf` behind `OCR_PDF=1`.
+    - Gating: In non-DEBUG, `/api/ai/write`, `/api/ai/revise`, and `/api/ai/format` require Pro/Enterprise. Free tier is blocked with HTTP 402 and header `X-Quota-Reason: ai_requires_pro`; DEBUG bypass allows local dev.
+- Files: upload pipeline hardened. Hard file-size cap with HTTP 413 on overflow; MIME guess + magic‑signature checks (png/jpg/jpeg/pdf/docx); safe MEDIA_ROOT containment + no symlinks; optional virus‑scan hook with timeout; txt/docx/pdf extraction; optional image OCR via pytesseract behind `OCR_IMAGE=1`; optional PDF OCR via `ocrmypdf` behind `OCR_PDF=1`.
 - SPA: auth + RequireOrg guards; deep-link persistence; assets under `/static/app/`; routes under `/app` (basename from `VITE_ROUTER_BASE`); dev refresh self-correct; NotFound route; minimal styling. Test-mode guard disables dev redirect; safeOpenExternal always opens in tests to satisfy spies.
+- SPA OAuth: provider-specific callback dispatch (stored provider hint) and minimal error UX mapping backend `code` values; deep-link preserved across roundtrip.
 - Billing UX: usage payload now includes `subscription.discount`; SPA usage banner surfaces active promo (percent/amount and duration) when present.
 - Error pages: minimal Django templates for 400/403/404/500.
 - Invites hygiene: expiry (`ORG_INVITE_TTL_DAYS`) and per‑org rate limiting (`ORG_INVITES_PER_HOUR`) implemented; acceptance logic prioritizes already_accepted over expiry; serializer fixed; tests cover create/list/revoke/accept/expiry/rate-limit.
-- Docs: install guide rewritten (idiot‑proof), README expanded, env templates updated with FAILED_PAYMENT_GRACE_DAYS and inline purpose comments (APP_HOSTS, CSP_* including CSP_CONNECT_SRC). Added GitHub/Facebook OAuth keys and setup notes.
-- Tests: 25 API tests passing (accounts, billing incl. seats/bundles/enterprise, exports determinism, invites). SPA unit tests passing (RequireAuth/RequireOrg, OAuth callback deep-link, paywall upgrade CTA, authoring final-format visibility). Initial Postgres-only RLS tests added (skipped on SQLite).
+- Docs: install guide rewritten (idiot‑proof), README expanded; env templates updated with FAILED_PAYMENT_GRACE_DAYS and inline purpose comments (APP_HOSTS, CSP_* including CSP_CONNECT_SRC). Added GitHub/Facebook OAuth keys and setup notes. New upload/backup settings documented: FILE_UPLOAD_MAX_BYTES, TEXT_EXTRACTION_MAX_BYTES, VIRUSSCAN_CMD, VIRUSSCAN_TIMEOUT_SECONDS; backups mount at `/backups`.
+    - Added CSP_ALLOW_INLINE_STYLES escape hatch docs; default CSP now avoids 'unsafe-inline' in style-src.
+    - Documented AI gating behavior and org scoping via `X-Org-ID`; async `{job_id}` responses and job polling notes.
+    - Added RLS (Postgres) testing instructions and VS Code task reference (use DATABASE_URL + “API: test (RLS on Postgres)”).
+- Tests: 25 core API tests passing (accounts, billing incl. seats/bundles/enterprise, exports determinism, invites). Additional files-upload security tests pass locally. SPA unit tests passing (RequireAuth/RequireOrg, OAuth callback deep-link, paywall upgrade CTA, authoring final-format visibility). Initial Postgres-only RLS tests added (skipped on SQLite).
+    - Added AI gating unit tests (free blocked, pro allowed, DEBUG bypass) for write/revise/format.
+    - RLS how-to documented in install guide; ready to run against a real Postgres via the VS Code task.
 - OAuth tests: added Google (JWKS verify success/fail), GitHub edge cases (no verified emails → 400; prefer verified over unverified primary), Facebook edge case (no email → 400). Cross‑provider same‑email login maps to one account.
-- Security hardening: landing `server.mjs` tightened (strict CSP, validated Umami src, Host not trusted, static GET/HEAD rate limiting). File uploads guarded against path traversal in helpers. SPA external navigation constrained via `safeOpenExternal` allow-list.
+- Security hardening: landing `server.mjs` tightened (strict CSP, validated Umami src, Host not trusted, static GET/HEAD rate limiting). Uploads: safe path checks, MIME/signature validation, hard size caps with 413, optional virus-scan hook. SPA external navigation constrained via `safeOpenExternal` allow-list.
+    - CSP tightened: no inline styles by default; `CSP_ALLOW_INLINE_STYLES=1` escape hatch available and documented.
 - Lint/build: API ruff passes; web lint configured for JS/JSX (flat config) and passes; TypeScript lint intentionally deferred. Vite build ok.
+    - Dev tasks: VS Code tasks consolidated; added Postgres-only RLS test task entry.
 
 ## Exit criteria (early testers)
 - Single-app deployment via Coolify/Traefik; Postgres + JSONB + RLS; quotas enforced (free/pro/enterprise).
@@ -108,8 +117,11 @@ Legend: [x] done, [ ] todo, [~] in progress
         - [x] PATCH autosave implemented and covered by tests
         - [ ] Versioning metadata pending
     - [x] Exports: POST /api/exports (md|pdf|docx), GET /api/exports/{id}; Markdown → PDF (ReportLab) / DOCX (python-docx)
-    - [x] Files: POST /api/files (pdf/png/jpg/jpeg/docx/txt) with txt/docx text extraction stub
-        - [x] Path traversal guards: all file helpers verify paths under MEDIA_ROOT before open/parse
+    - [x] Files: POST /api/files (pdf/png/jpg/jpeg/docx/txt) with txt/docx/pdf extraction + optional OCR
+        - [x] Path traversal guards: all file helpers verify paths under MEDIA_ROOT (no symlinks)
+        - [x] MIME guess + magic-signature validation for png/jpg/jpeg/pdf/docx
+        - [x] Hard size cap with HTTP 413 `file_too_large`
+        - [x] Optional virus-scan hook with timeout; fail-closed on errors
 - [x] AI orchestration endpoints
     - [x] Planner: POST /api/ai/plan
     - [x] Writer: POST /api/ai/write
@@ -141,11 +153,11 @@ Legend: [x] done, [ ] todo, [~] in progress
           - When org admin is changed, recompute org tier from new admin's plan and re-enforce quotas immediately.
       - [x] Safety-net enforcement:
           - Daily job to enforce cancel_at_period_end after current_period_end (management command + compose beat)
-    - [ ] Quota check logic for AI writes (personal vs org-admin plan)
+    - [x] Quota check logic for AI writes (personal vs org-admin plan) with DEBUG bypass and org scope via `X-Org-ID`; unit tests cover allow/block paths.
 - [~] Files/OCR
     - [~] Basic image OCR via pytesseract/PIL behind flag `OCR_IMAGE=1` (see `files/views.py`).
     - [x] PDF text extraction via pdfminer.six; optional OCR pipeline behind `OCR_PDF=1` using `ocrmypdf` CLI when available.
-    - [ ] Content-length/timeouts; virus scan hook (optional, stub ok)
+    - [x] Content-length cap (FILE_UPLOAD_MAX_BYTES) returns 413; extraction capped (TEXT_EXTRACTION_MAX_BYTES); virus-scan hook with timeout.
 - [ ] Prompt shield
     - [ ] Central prompts + basic injection screening (e.g., Rebuff/Promptfoo integration or rules)
     - [~] Tests
@@ -221,7 +233,7 @@ Legend: [x] done, [ ] todo, [~] in progress
         - [x] Minimal markup only; no inline styles; error pages plain HTML (see `docs/design_system.md`)
     - [ ] Analytics/tests
         - [x] Umami integration
-        - [~] SPA tests
+    - [~] SPA tests
             - [x] Unit: RequireAuth, RequireOrg, OAuth callback deep-link, paywall upgrade CTA
             - [ ] E2E: deep-link across OAuth + register; paywall end-to-end
     - [ ] Extract all user-facing text and copy from the entire #codebase into a standalone keys file, so text on the app can be easily edited in a single location. Annotate and organize the keys by section so it is clear exactly when and how the user will encounter them. Make sure keys are escaped when fetched, so I do not have to manually escape symbols in the keys file. Prepares for front-end styling and i18n. 
@@ -243,7 +255,11 @@ Legend: [x] done, [ ] todo, [~] in progress
 
 8) Operations and Security
 - [x] Secrets management (env vars documented; no keys in repo)
-- [ ] Backups (Postgres volume + uploaded files)
+- [x] Backups (Postgres DB)
+    - [x] Daily `pg_dump` script writes gzipped SQL to `/backups` (mounted volume)
+    - [x] Compose wiring for `/backups` volume; optional dedicated backup service
+    - [x] Docs: install guide updated; notes for Duplicati integration
+    - [ ] Uploads backup (media) strategy documented and verified
 - [ ] Basic monitoring/logging (structured logs; health endpoints)
 - [ ] Security baseline
     - [~] Dependency scan (pip/npm)
@@ -390,12 +406,16 @@ Notes
 - SPA: proposals list/create; org management + invites; exports UI; upgrade + portal; RequireAuth/RequireOrg; base path alignment; NotFound; minimal styling.
 - SPA tests green (unit); jsdom navigation quirks handled via test guards; Vite prod build clean (no source maps/console).
 - Docs: README updated with expanded env keys; exports_async.md; design_system.md; install guide rewritten with env reference (APP_HOSTS, CSP_CONNECT_SRC), copy-paste env block, and Coolify runbook.
+- Backups: daily pg_dump to `/backups` with compose volume; docs updated.
+- Uploads: hard size caps with 413; MIME/magic validation; safe MEDIA_ROOT-only access; optional virus-scan hook with timeout; files security tests added.
 
 ## Next up (short-term)
 - Stripe lifecycle: live-mode verification of coupons/promo codes; ensure usage reflects active discounts end-to-end in staging.
 - Invites: SPA polish for invite acceptance UX (backend hygiene done with expiry/rate-limit).
 - RLS coverage: expand Postgres tests; document least-privileged DB user; consider migration hardening for policies.
 - SPA tests: export-after-formatting flow; end-to-end deep-link across OAuth + register; paywall E2E.
-- Operations: backups for Postgres and uploads; minimal monitoring/healthcheck runbook; dependency scans.
+- Operations: verify DB restore procedure; add uploads (media) backup guidance; minimal monitoring/healthcheck runbook; dependency scans re-run.
 - Proxy/CSP: finalize Traefik routes and tighten CSP allow-lists per environment (include analytics host only where needed).
 - Linting: If/when needed, add @typescript-eslint (v8) to enable TS lint; adjust flat config accordingly.
+ - RLS: Run Postgres-only RLS test task with a real DATABASE_URL; expand matrix (creator/admin/member/anon). Steps documented in `docs/install_guide.md`.
+ - AI: Optional async-mode tests for AI endpoints (job polling) when `AI_ASYNC=1` is enabled.

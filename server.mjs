@@ -188,6 +188,13 @@ async function handle(req, res) {
   const url = new URL(req.url, origin);
 
   if (req.method === 'POST' && url.pathname === '/api/waitlist') {
+    // Simple concurrency guard to avoid overwhelming downstream services
+    globalThis.__postInflight = globalThis.__postInflight || 0;
+    const MAX_POST_INFLIGHT = Number(process.env.MAX_POST_INFLIGHT || 50);
+    if (globalThis.__postInflight >= MAX_POST_INFLIGHT) {
+      return sendJson(res, 503, { error: 'Busy, try again' });
+    }
+    globalThis.__postInflight += 1;
     const ip = req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
     if (!checkRate(ip)) return sendJson(res, 429, { error: 'Too many requests' });
     let body = '';
@@ -211,7 +218,11 @@ async function handle(req, res) {
         // Double opt-in: add as unsubscribed with a token and send confirmation email with link
   // Stronger token (random UUID-ish string)
   const token = cryptoRandom();
-  const confirmBase = safePublicBaseUrl(process.env.PUBLIC_BASE_URL) || `http://localhost:${PORT}`;
+        // In production, do not fall back to cleartext. If PUBLIC_BASE_URL is missing/invalid in prod,
+        // use a non-routable https origin to avoid accidental cleartext links.
+        const confirmBase = (process.env.NODE_ENV === 'production')
+          ? (safePublicBaseUrl(process.env.PUBLIC_BASE_URL) || 'https://example.invalid')
+          : (safePublicBaseUrl(process.env.PUBLIC_BASE_URL) || `http://localhost:${PORT}`);
         const confirmLink = `${confirmBase}/confirm?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
 
         // Store token in Mailgun member vars; member is unsubscribed (no)
@@ -219,12 +230,13 @@ async function handle(req, res) {
 
         // Send confirmation email
         await sendMail(email, 'Confirm your Granterstellar waitlist subscription', `Please confirm your email by visiting: ${confirmLink}\n\nIf you didn't request this, ignore this email.`);
-        return sendJson(res, 200, { ok: true, pending: true });
+    return sendJson(res, 200, { ok: true, pending: true });
       } catch (e) {
         logError('[waitlist] Error handling request', e);
         return sendJson(res, 500, { error: 'Server error' });
       }
-    });
+  });
+  res.on('close', () => { globalThis.__postInflight = Math.max(0, (globalThis.__postInflight || 0) - 1); });
     return;
   }
 
@@ -307,7 +319,8 @@ async function handle(req, res) {
             return out;
           }
           const marker = '</head>';
-      const tag = `\n  <script async src="${UMAMI.src}" data-website-id="${escapeAttr(websiteId)}"></script>\n`;
+          // Insert strictly-sanitized analytics tag: both src and attributes escaped
+          const tag = `\n  <script async src="${escapeAttr(UMAMI.src)}" data-website-id="${escapeAttr(websiteId)}"></script>\n`;
           if (!html.includes('data-website-id')) {
             html = html.replace(marker, `${tag}${marker}`);
           }
@@ -326,7 +339,7 @@ async function handle(req, res) {
   }
 }
 
-// Prefer HTTPS when cert/key provided (useful outside Traefik). Otherwise bind HTTP (dev/local).
+// Prefer HTTPS when cert/key provided (useful outside Traefik). Otherwise bind HTTP (dev/local only).
 const HTTPS_KEY_PATH = process.env.HTTPS_KEY_PATH;
 const HTTPS_CERT_PATH = process.env.HTTPS_CERT_PATH;
 if (process.env.ENABLE_HTTPS === '1' && HTTPS_KEY_PATH && HTTPS_CERT_PATH) {
@@ -343,7 +356,12 @@ if (process.env.ENABLE_HTTPS === '1' && HTTPS_KEY_PATH && HTTPS_CERT_PATH) {
     });
   }
 } else {
-  // Note: HTTPS is terminated by Traefik/Coolify in deployment.
+  // In production, refuse to start plain HTTP to avoid cleartext traffic; rely on external HTTPS termination.
+  if (process.env.NODE_ENV === 'production') {
+    console.error('Refusing to start HTTP server in production without ENABLE_HTTPS=1');
+    process.exit(1);
+  }
+  // Note: HTTPS is typically terminated by Traefik/Coolify in deployment; local dev can use HTTP.
   http.createServer(handle).listen(PORT, () => {
     console.log(`Landing server running on http://localhost:${PORT}`);
   });

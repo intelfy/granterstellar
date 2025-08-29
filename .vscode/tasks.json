@@ -1,5 +1,4 @@
 {
-  // VS Code tasks to streamline local dev
   "version": "2.0.0",
   "tasks": [
     {
@@ -64,6 +63,18 @@
   "command": "cd api && DEBUG=1 SECRET_KEY=test .venv/bin/python manage.py test -v 2 accounts.tests.test_health billing.tests.test_quota billing.tests.test_usage billing.tests.test_webhooks exports.tests.test_determinism orgs.tests.test_invites billing.tests.test_seats billing.tests.test_bundles_and_seats billing.tests.test_enterprise_allocations billing.tests.test_portal",
       "group": "test",
       "problemMatcher": ["$python"]
+    },
+    {
+      "label": "API: test (RLS on Postgres)",
+      "type": "shell",
+      "command": "cd api && DEBUG=1 SECRET_KEY=test .venv/bin/python manage.py test -v 2 db_policies.tests",
+      "group": "test",
+      "problemMatcher": ["$python"],
+      "options": {
+        "env": {
+          "DJANGO_SETTINGS_MODULE": "app.settings"
+        }
+      }
     },
     {
       "label": "Web: lint",

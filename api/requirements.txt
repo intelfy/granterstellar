@@ -1,6 +1,6 @@
-Django==5.0.7
+Django==5.1.10
 djangorestframework==3.15.2
-gunicorn==22.0.0
+gunicorn==23.0.0
 psycopg[binary]==3.2.9
 whitenoise==6.7.0
 django-cors-headers==4.4.0
@@ -10,7 +10,7 @@ redis==5.0.7
 dj-database-url==2.2.0
 stripe==10.6.0
 PyJWT==2.9.0
-djangorestframework-simplejwt==5.3.1
+djangorestframework-simplejwt==5.5.1
 reportlab==4.2.2
 python-docx==1.1.2
 ruff==0.6.9

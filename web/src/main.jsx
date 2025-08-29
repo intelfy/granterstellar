@@ -72,6 +72,23 @@ function safeOpenExternal(u, allowedOrigins = []) {
   } catch { return false }
 }
 
+// Ensure post-login destinations are internal-only
+function sanitizeNext(dest) {
+  try {
+    const d = String(dest || '')
+    if (!d) return `${ROUTER_BASE}`
+    // Absolute URLs or protocol-relative are rejected
+    if (/^https?:\/\//i.test(d) || d.startsWith('//')) return `${ROUTER_BASE}`
+    // Ensure it starts with a single '/'
+    const withSlash = d.startsWith('/') ? d : `/${d}`
+    // Only allow routes under our router base
+    if (!withSlash.startsWith(ROUTER_BASE)) return `${ROUTER_BASE}`
+    return withSlash
+  } catch {
+    return `${ROUTER_BASE}`
+  }
+}
+
 function Umami() {
   // Inject Umami script if configured
   useEffect(() => {
@@ -175,12 +192,13 @@ function LoginPage({ token, setToken }) {
   const navigate = useNavigate()
   const location = useLocation()
   const next = useMemo(() => new URLSearchParams(location.search).get('next') || `${ROUTER_BASE}`, [location.search])
+  const safeNext = useMemo(() => sanitizeNext(next), [next])
   // If already authenticated, skip login and go to next/app directly
   useEffect(() => {
     if (token) {
-      navigate(next, { replace: true })
+    navigate(safeNext, { replace: true })
     }
-  }, [token, next, navigate])
+  }, [token, safeNext, navigate])
   useEffect(() => {
     const url = new URL(window.location.href)
     const inv = url.searchParams.get('invite')
@@ -213,10 +231,10 @@ function LoginPage({ token, setToken }) {
       // Require at least one org: if none, go to registration; otherwise, continue
       try {
         const orgs = await api('/orgs/', { token: data.access })
-        if (Array.isArray(orgs) && orgs.length === 0) navigate(`/register?next=${encodeURIComponent(next)}`, { replace: true })
-        else navigate(next, { replace: true })
+  if (Array.isArray(orgs) && orgs.length === 0) navigate(`/register?next=${encodeURIComponent(safeNext)}`, { replace: true })
+  else navigate(safeNext, { replace: true })
       } catch {
-        navigate(next, { replace: true })
+  navigate(safeNext, { replace: true })
       }
     } catch {
       setToken('')
@@ -225,7 +243,9 @@ function LoginPage({ token, setToken }) {
   const onGoogleStart = async () => {
     try {
   // Preserve post-login destination across OAuth roundtrip
-  if (next) sessionStorage.setItem('postLoginNext', next)
+  if (safeNext) sessionStorage.setItem('postLoginNext', safeNext)
+  // Remember provider for callback routing
+  sessionStorage.setItem('oauthProvider', 'google')
       const url = new URL(window.location.href)
       const inv = url.searchParams.get('invite')
       const qs = inv ? `?invite=${encodeURIComponent(inv)}` : ''
@@ -238,7 +258,8 @@ function LoginPage({ token, setToken }) {
           const isGitHub = (u.origin === 'https://github.com' && u.pathname === '/login/oauth/authorize')
           const isFacebook = (u.origin === 'https://www.facebook.com' && (/^\/v\d+(?:\.\d+)?\/dialog\/oauth$/.test(u.pathname) || u.pathname === '/dialog/oauth'))
           if (isGoogle || isGitHub || isFacebook) {
-            window.location.href = u.toString()
+            // Safe navigation: explicit provider auth endpoints only
+            window.location.assign(u.toString())
           }
         } catch {}
       }
@@ -256,10 +277,10 @@ function LoginPage({ token, setToken }) {
         setToken(json.access)
         try {
           const orgs = await api('/orgs/', { token: json.access })
-          if (Array.isArray(orgs) && orgs.length === 0) navigate(`/register?next=${encodeURIComponent(next)}`, { replace: true })
-          else navigate(next, { replace: true })
+          if (Array.isArray(orgs) && orgs.length === 0) navigate(`/register?next=${encodeURIComponent(safeNext)}`, { replace: true })
+          else navigate(safeNext, { replace: true })
         } catch {
-          navigate(next, { replace: true })
+          navigate(safeNext, { replace: true })
         }
       }
     } catch { alert('Debug OAuth failed') }
@@ -277,7 +298,8 @@ function LoginPage({ token, setToken }) {
       <button type="button" onClick={onGoogleStart}>Sign in with Google</button>
       <button type="button" onClick={async () => {
         try {
-          if (next) sessionStorage.setItem('postLoginNext', next)
+          if (safeNext) sessionStorage.setItem('postLoginNext', safeNext)
+          sessionStorage.setItem('oauthProvider', 'github')
           const url = new URL(window.location.href)
           const inv = url.searchParams.get('invite')
           const qs = inv ? `?invite=${encodeURIComponent(inv)}` : ''
@@ -286,14 +308,15 @@ function LoginPage({ token, setToken }) {
             try {
               const u = new URL(data.auth_url)
               const isGitHub = (u.origin === 'https://github.com' && u.pathname === '/login/oauth/authorize')
-              if (isGitHub) window.location.href = u.toString()
+              if (isGitHub) window.location.assign(u.toString())
             } catch {}
           }
         } catch {}
       }}>Sign in with GitHub</button>
       <button type="button" onClick={async () => {
         try {
-          if (next) sessionStorage.setItem('postLoginNext', next)
+          if (safeNext) sessionStorage.setItem('postLoginNext', safeNext)
+          sessionStorage.setItem('oauthProvider', 'facebook')
           const url = new URL(window.location.href)
           const inv = url.searchParams.get('invite')
           const qs = inv ? `?invite=${encodeURIComponent(inv)}` : ''
@@ -302,7 +325,7 @@ function LoginPage({ token, setToken }) {
             try {
               const u = new URL(data.auth_url)
               const isFacebook = (u.origin === 'https://www.facebook.com' && (/^\/v\d+(?:\.\d+)?\/dialog\/oauth$/.test(u.pathname) || u.pathname === '/dialog/oauth'))
-              if (isFacebook) window.location.href = u.toString()
+              if (isFacebook) window.location.assign(u.toString())
             } catch {}
           }
         } catch {}
@@ -543,7 +566,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, usage, onUpgrade }) {
                     {filesBySection[current.id].map((f, idx) => (
                       <li key={idx}>
                         <div>
-                          <a href={f.url} target="_blank" rel="noreferrer">{f.name || `file-${idx+1}`}</a>
+                          <a href={f.url} target="_blank" rel="noopener noreferrer">{f.name || `file-${idx+1}`}</a>
                         </div>
                         {f.ocr_text && (
                           <div>
@@ -904,7 +927,8 @@ export function OAuthCallback({ setToken }) {
     const params = new URLSearchParams(location.search)
     const code = params.get('code')
     const state = params.get('state')
-  const storedNext = sessionStorage.getItem('postLoginNext') || `${ROUTER_BASE}`
+  const storedNext = sanitizeNext(sessionStorage.getItem('postLoginNext') || `${ROUTER_BASE}`)
+  const provider = sessionStorage.getItem('oauthProvider') || 'google'
     if (!code) {
       navigate('/login', { replace: true })
       return
@@ -913,7 +937,8 @@ export function OAuthCallback({ setToken }) {
       try {
         const body = new URLSearchParams({ code })
         if (state) body.set('state', state)
-        const res = await fetch(`${apiBase}/oauth/google/callback`, {
+    // Dispatch to provider-specific API callback
+    const res = await fetch(`${apiBase}/oauth/${provider}/callback`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: body.toString(),
@@ -947,6 +972,7 @@ export function OAuthCallback({ setToken }) {
       }
       finally {
         sessionStorage.removeItem('postLoginNext')
+  sessionStorage.removeItem('oauthProvider')
       }
     })()
   }, [location.search, navigate, setToken])

@@ -43,7 +43,7 @@ Step 3 — Deploy the App (API + SPA)
 2) Repo: this repo; Branch: main; Context: repo root; Dockerfile path: api/Dockerfile.
 3) Domain: your app domain (e.g., app.example.com). Traefik will handle HTTPS.
 4) Internal Port: 8000. Healthcheck path: /healthz.
-5) Storage: add a volume mounted at /app/media (stores uploads/exports).
+5) Storage: add volumes mounted at /app/media (uploads/exports) and optionally /backups (DB dumps for external backup tools).
 6) Environment → paste the template below and fill values (keep syntax exactly):
 
 Paste this into Coolify → Environment
@@ -98,9 +98,15 @@ DRF_THROTTLE_ANON=20/min
 
 # Uploads & OCR (optional)
 FILE_UPLOAD_MAX_MEMORY_SIZE=10485760
+FILE_UPLOAD_MAX_BYTES=10485760
+TEXT_EXTRACTION_MAX_BYTES=8388608
 ALLOWED_UPLOAD_EXTENSIONS=pdf,png,jpg,jpeg,docx,txt
 OCR_IMAGE=0
 OCR_PDF=0
+
+# Optional virus scan hook (command template; {path} placeholder is replaced with file path)
+VIRUSSCAN_CMD=
+VIRUSSCAN_TIMEOUT_SECONDS=10
 
 # Quotas
 QUOTA_FREE_ACTIVE_CAP=1
@@ -200,6 +206,10 @@ Content Security Policy (CSP) allow‑lists
       - Multiple endpoints: CSP_CONNECT_SRC=https://analytics.example.com,https://api.other.com
    - Not needed for: Google OAuth redirects (top‑level navigation), server‑to‑server calls in Django.
 
+Inline styles escape hatch
+- CSP_ALLOW_INLINE_STYLES: Set to 1 to temporarily allow inline CSS by adding 'unsafe-inline' to style-src. Default is 0 (disabled), which is recommended for security.
+   - Example: CSP_ALLOW_INLINE_STYLES=1 (use only as a short-term workaround while migrating styles to external CSS).
+
 
 7) Build Arguments (optional): STRIP_PY=1 to obfuscate Python source in the image (enable for production later).
 8) Deploy. After first deploy, run migrations:
@@ -255,9 +265,26 @@ Quotas
 - QUOTA_FREE_ACTIVE_CAP=1, QUOTA_PRO_MONTHLY_CAP=20, QUOTA_PRO_PER_SEAT=10, QUOTA_ENTERPRISE_MONTHLY_CAP= (empty for unlimited).
 - Check with GET /api/usage. On quota block, POST /api/proposals returns 402 with X-Quota-Reason.
 
+AI endpoints and gating
+- Scoping: Pass `X-Org-ID: <org_id>` to apply AI usage and subscription checks to an organization. Omit to use the personal scope.
+- Gating (production): `/api/ai/write`, `/api/ai/revise`, and `/api/ai/format` require a Pro/Enterprise plan in the chosen scope. Free tier requests are blocked with HTTP 402 and `X-Quota-Reason: ai_requires_pro`.
+- DEBUG bypass: When `DEBUG=1`, AI endpoints allow requests regardless of plan (useful for local development and tests).
+- Async (optional): With `AI_ASYNC=1` and Celery configured, AI calls return `{job_id}` and progress can be polled via `/api/ai/jobs/{id}`.
+
 Admin/operations
 - Add Coolify Scheduled Command (daily) to run: python manage.py enforce_subscription_periods
-- Backups: enable Postgres backups in Coolify. Test restore.
+- Backups: two options
+   1) Enable managed Postgres backups in Coolify (recommended if available). Test restore.
+   2) Self-managed dumps: mount a persistent volume at /backups and run the provided script daily.
+       - Script: scripts/pg_dump_daily.sh (expects DATABASE_URL)
+       - Compose example includes a 'backup' service that runs this daily and writes gzipped SQL files under /backups.
+       - Point Duplicati (or your backup tool) at the /backups path to offload copies off-site.
+
+Uploads behavior and tuning
+- Oversized uploads: when a file exceeds FILE_UPLOAD_MAX_BYTES, the API returns HTTP 413 with `{ "error": "file_too_large", "limit": <bytes> }`.
+- Signature/MIME checks: png/jpg/jpeg/pdf/docx are validated with magic bytes and MIME guess; mismatches return 400 (`mismatched_signature` or `mismatched_content_type`).
+- Extraction limits: text/parse work is bounded by TEXT_EXTRACTION_MAX_BYTES to avoid heavy CPU/memory usage.
+- Optional virus scan: set VIRUSSCAN_CMD to a command template (use `{path}` placeholder). Non‑zero exit is treated as infected (400 `infected`); invocation errors fail closed (400 `scan_error`).
 
 Common mistakes (and fixes)
 - 403/CSRF or CORS errors: ensure CORS_ALLOWED_ORIGINS and CSRF_TRUSTED_ORIGINS include your https origin, no trailing slashes.
@@ -265,5 +292,29 @@ Common mistakes (and fixes)
 - Stripe webhook 401/400: set STRIPE_WEBHOOK_SECRET in production; in DEBUG webhooks accept unsigned JSON.
 - SPA not loading assets: keep VITE_BASE_URL=/static/app/ (matches Dockerfile copy path and Django static path).
 - Invites email not sent: configure EMAIL_* SMTP settings and INVITE_SENDER_DOMAIN; check provider logs.
+
+## Run RLS (Postgres) tests locally
+
+Row-Level Security tests only run against PostgreSQL and are skipped on SQLite. To run them locally:
+
+- Start a Postgres instance you can connect to (Docker, local, or managed).
+- Set DATABASE_URL to your Postgres connection (the test runner will use it).
+- Apply migrations to that database before running tests.
+
+Two easy options:
+
+1) Using VS Code task (recommended)
+   - Ensure DATABASE_URL is set in your shell or the workspace environment.
+   - Run task: “API: test (RLS on Postgres)”.
+
+2) Using the Django test runner directly
+   - From the repo root:
+     - cd api
+     - DEBUG=1 SECRET_KEY=test DATABASE_URL=postgres://USER:PASS@HOST:5432/DB .venv/bin/python manage.py migrate
+     - DEBUG=1 SECRET_KEY=test DATABASE_URL=postgres://USER:PASS@HOST:5432/DB .venv/bin/python manage.py test -v 2 db_policies.tests
+
+Notes
+- If connection.vendor is not "postgresql", the suite is skipped by design.
+- Keep a disposable database for tests; they create/tear down data.
 
 Last updated: 2025-08-29

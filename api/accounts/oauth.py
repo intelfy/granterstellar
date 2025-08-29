@@ -1,4 +1,5 @@
 import json
+import secrets
 import urllib.parse
 import urllib.request
 from urllib.parse import urlencode
@@ -7,6 +8,7 @@ import jwt as pyjwt  # PyJWT
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
+from django.views.decorators.http import require_GET, require_POST
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -39,6 +41,52 @@ def _get_or_create_user_by_email(email: str):
     return user, True
 
 
+def _gen_oauth_csrf_token():
+    return secrets.token_urlsafe(32)
+
+
+def _set_oauth_csrf_cookie(resp: JsonResponse, token: str):
+    # Send HttpOnly, Lax cookie so it returns on top-level navigation back to our domain
+    resp.set_cookie(
+        'oauth_csrf',
+        token,
+        max_age=600,
+        secure=not settings.DEBUG,
+        httponly=True,
+        samesite='Lax',
+    )
+    return resp
+
+
+ALLOWED_OAUTH_HOSTS = {
+    'accounts.google.com',
+    'oauth2.googleapis.com',
+    'github.com',
+    'api.github.com',
+    'www.facebook.com',
+    'graph.facebook.com',
+}
+
+
+def _urlopen_fixed(req: urllib.request.Request | str, *, timeout: int = 10):
+    """Open a HTTPS URL after asserting the hostname is allow-listed.
+
+    Accepts either a Request or string URL; raises on non-HTTPS or unknown host.
+    """
+    if isinstance(req, urllib.request.Request):
+        url = req.full_url
+    else:
+        url = req
+        req = urllib.request.Request(url)
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != 'https':
+        raise ValueError('non-https URL not allowed')
+    host = parsed.hostname or ''
+    if host not in ALLOWED_OAUTH_HOSTS:
+        raise ValueError('URL host not allowed')
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
 def _verify_google_id_token_prod(id_token: str) -> dict:
     """Verify a Google id_token signature and standard claims via JWKS in production.
     Returns claims dict on success; raises on failure.
@@ -68,6 +116,7 @@ def _verify_google_id_token_prod(id_token: str) -> dict:
         raise ValueError(f'id_token verification failed: {e}') from e
 
 
+@require_GET
 def google_start(request):
     client_id = getattr(settings, 'GOOGLE_CLIENT_ID', '')
     redirect_uri = getattr(settings, 'OAUTH_REDIRECT_URI', '')
@@ -77,6 +126,8 @@ def google_start(request):
             status=400,
         )
     invite = request.GET.get('invite')
+    # Embed an anti-CSRF token into state and set it as a cookie
+    csrf_token = _gen_oauth_csrf_token()
     params = {
         'client_id': client_id,
         'redirect_uri': redirect_uri,
@@ -85,39 +136,53 @@ def google_start(request):
         'access_type': 'offline',
         'prompt': 'consent',
     }
+    state_obj = {'csrf': csrf_token}
     if invite:
-        params['state'] = f'inv:{invite}'
+        state_obj['invite'] = invite
+    params['state'] = json.dumps(state_obj, separators=(',', ':'))
     url = 'https://accounts.google.com/o/oauth2/v2/auth?' + urlencode(params)
-    return JsonResponse({'auth_url': url})
+    return _set_oauth_csrf_cookie(JsonResponse({'auth_url': url}), csrf_token)
 
 
+# Callback endpoints are csrf_exempt because providers POST back to us from a different origin.
+# Compensating controls:
+#  - State cookie validation (oauth_csrf) prevents CSRF on callback
+#  - Fixed-host HTTPS requests for token/userinfo via _urlopen_fixed prevent SSRF
+#  - POST-only, no JSONP/GET callbacks
+@require_POST
 @csrf_exempt
 def google_callback(request):
-    code = request.GET.get('code') or request.POST.get('code')
+    code = request.POST.get('code')
     if not code:
         return JsonResponse(
             {'ok': False, 'error': 'missing code', 'code': 'missing_code'},
             status=400,
         )
     # capture invite from state or explicit param
-    state = request.GET.get('state') or request.POST.get('state') or ''
+    state = request.POST.get('state') or ''
     invite_token = None
+    csrf_expected = request.COOKIES.get('oauth_csrf', '')
     if state:
         try:
-            # support either inv:<token> or JSON {invite: token}
             if state.startswith('inv:'):
+                # Legacy format (no CSRF) – reject in non-DEBUG
+                if not settings.DEBUG:
+                    return JsonResponse({'ok': False, 'error': 'invalid state', 'code': 'invalid_state'}, status=400)
                 invite_token = state[4:]
             else:
                 st = json.loads(state)
                 invite_token = st.get('invite')
+                csrf_state = st.get('csrf') or ''
+                if not csrf_expected or not csrf_state or csrf_state != csrf_expected:
+                    return JsonResponse({'ok': False, 'error': 'invalid state', 'code': 'invalid_state'}, status=400)
         except Exception:
-            pass
+            return JsonResponse({'ok': False, 'error': 'invalid state', 'code': 'invalid_state'}, status=400)
     if not invite_token:
         invite_token = request.GET.get('invite') or request.POST.get('invite')
 
     # DEBUG shortcut: allow direct email-based login without contacting Google
     if settings.DEBUG and not getattr(settings, 'GOOGLE_CLIENT_SECRET', ''):
-        email = request.GET.get('email') or request.POST.get('email')
+        email = request.POST.get('email')
         if not email:
             return JsonResponse({'ok': False, 'error': 'missing email', 'code': 'missing_email'}, status=400)
         user, _ = _get_or_create_user_by_email(email)
@@ -168,11 +233,10 @@ def google_callback(request):
         'grant_type': 'authorization_code',
     }).encode('utf-8')
     try:
-        req = urllib.request.Request(
-            'https://oauth2.googleapis.com/token', data=data, method='POST'
-        )
+        # Strictly fixed token endpoint to avoid SSRF
+        req = urllib.request.Request('https://oauth2.googleapis.com/token', data=data, method='POST')
         req.add_header('Content-Type', 'application/x-www-form-urlencoded')
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with _urlopen_fixed(req, timeout=10) as resp:
             body = resp.read().decode('utf-8')
             token_payload = json.loads(body)
     except Exception:
@@ -238,6 +302,7 @@ def google_callback(request):
 
 # --- GitHub OAuth ---
 
+@require_GET
 def github_start(request):
     client_id = getattr(settings, 'GITHUB_CLIENT_ID', '')
     redirect_uri = getattr(settings, 'GITHUB_REDIRECT_URI', '')
@@ -247,42 +312,52 @@ def github_start(request):
             status=400,
         )
     invite = request.GET.get('invite')
+    csrf_token = _gen_oauth_csrf_token()
     params = {
         'client_id': client_id,
         'redirect_uri': redirect_uri,
         'scope': 'read:user user:email',
     }
+    state_obj = {'csrf': csrf_token}
     if invite:
-        params['state'] = f'inv:{invite}'
+        state_obj['invite'] = invite
+    params['state'] = json.dumps(state_obj, separators=(',', ':'))
     url = 'https://github.com/login/oauth/authorize?' + urlencode(params)
-    return JsonResponse({'auth_url': url})
+    return _set_oauth_csrf_cookie(JsonResponse({'auth_url': url}), csrf_token)
 
 
+@require_POST
 @csrf_exempt
 def github_callback(request):
-    code = request.GET.get('code') or request.POST.get('code')
+    code = request.POST.get('code')
     if not code:
         return JsonResponse(
             {'ok': False, 'error': 'missing code', 'code': 'missing_code'},
             status=400,
         )
-    state = request.GET.get('state') or request.POST.get('state') or ''
+    state = request.POST.get('state') or ''
     invite_token = None
+    csrf_expected = request.COOKIES.get('oauth_csrf', '')
     if state:
         try:
             if state.startswith('inv:'):
+                if not settings.DEBUG:
+                    return JsonResponse({'ok': False, 'error': 'invalid state', 'code': 'invalid_state'}, status=400)
                 invite_token = state[4:]
             else:
                 st = json.loads(state)
                 invite_token = st.get('invite')
+                csrf_state = st.get('csrf') or ''
+                if not csrf_expected or not csrf_state or csrf_state != csrf_expected:
+                    return JsonResponse({'ok': False, 'error': 'invalid state', 'code': 'invalid_state'}, status=400)
         except Exception:
-            pass
+            return JsonResponse({'ok': False, 'error': 'invalid state', 'code': 'invalid_state'}, status=400)
     if not invite_token:
         invite_token = request.GET.get('invite') or request.POST.get('invite')
 
     # DEBUG shortcut: email-based login
     if settings.DEBUG and not getattr(settings, 'GITHUB_CLIENT_SECRET', ''):
-        email = request.GET.get('email') or request.POST.get('email')
+        email = request.POST.get('email')
         if not email:
             return JsonResponse({'ok': False, 'error': 'missing email', 'code': 'missing_email'}, status=400)
         user, _ = _get_or_create_user_by_email(email)
@@ -328,9 +403,10 @@ def github_callback(request):
         'redirect_uri': redirect_uri,
     }).encode('utf-8')
     try:
+        # Fixed origin to GitHub token endpoint
         req = urllib.request.Request('https://github.com/login/oauth/access_token', data=data, method='POST')
         req.add_header('Accept', 'application/json')
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with _urlopen_fixed(req, timeout=10) as resp:
             body = resp.read().decode('utf-8')
             token_payload = json.loads(body)
     except Exception:
@@ -341,10 +417,11 @@ def github_callback(request):
 
     # Fetch user emails and choose a verified/primary email
     try:
+        # Fixed GitHub API endpoint
         ureq = urllib.request.Request('https://api.github.com/user/emails')
         ureq.add_header('Accept', 'application/vnd.github+json')
         ureq.add_header('Authorization', f'Bearer {access_token}')
-        with urllib.request.urlopen(ureq, timeout=10) as uresp:
+        with _urlopen_fixed(ureq, timeout=10) as uresp:
             ubody = uresp.read().decode('utf-8')
             emails = json.loads(ubody)
     except Exception:
@@ -404,6 +481,7 @@ def github_callback(request):
 
 # --- Facebook OAuth ---
 
+@require_GET
 def facebook_start(request):
     app_id = getattr(settings, 'FACEBOOK_APP_ID', '')
     redirect_uri = getattr(settings, 'FACEBOOK_REDIRECT_URI', '')
@@ -414,42 +492,52 @@ def facebook_start(request):
             status=400,
         )
     invite = request.GET.get('invite')
+    csrf_token = _gen_oauth_csrf_token()
     params = {
         'client_id': app_id,
         'redirect_uri': redirect_uri,
         'response_type': 'code',
         'scope': 'email',
     }
+    state_obj = {'csrf': csrf_token}
     if invite:
-        params['state'] = f'inv:{invite}'
+        state_obj['invite'] = invite
+    params['state'] = json.dumps(state_obj, separators=(',', ':'))
     url = f'https://www.facebook.com/{api_version}/dialog/oauth?' + urlencode(params)
-    return JsonResponse({'auth_url': url})
+    return _set_oauth_csrf_cookie(JsonResponse({'auth_url': url}), csrf_token)
 
 
+@require_POST
 @csrf_exempt
 def facebook_callback(request):
-    code = request.GET.get('code') or request.POST.get('code')
+    code = request.POST.get('code')
     if not code:
         return JsonResponse(
             {'ok': False, 'error': 'missing code', 'code': 'missing_code'},
             status=400,
         )
-    state = request.GET.get('state') or request.POST.get('state') or ''
+    state = request.POST.get('state') or ''
     invite_token = None
+    csrf_expected = request.COOKIES.get('oauth_csrf', '')
     if state:
         try:
             if state.startswith('inv:'):
+                if not settings.DEBUG:
+                    return JsonResponse({'ok': False, 'error': 'invalid state', 'code': 'invalid_state'}, status=400)
                 invite_token = state[4:]
             else:
                 st = json.loads(state)
                 invite_token = st.get('invite')
+                csrf_state = st.get('csrf') or ''
+                if not csrf_expected or not csrf_state or csrf_state != csrf_expected:
+                    return JsonResponse({'ok': False, 'error': 'invalid state', 'code': 'invalid_state'}, status=400)
         except Exception:
-            pass
+            return JsonResponse({'ok': False, 'error': 'invalid state', 'code': 'invalid_state'}, status=400)
     if not invite_token:
         invite_token = request.GET.get('invite') or request.POST.get('invite')
 
     if settings.DEBUG and not getattr(settings, 'FACEBOOK_APP_SECRET', ''):
-        email = request.GET.get('email') or request.POST.get('email')
+        email = request.POST.get('email')
         if not email:
             return JsonResponse({'ok': False, 'error': 'missing email', 'code': 'missing_email'}, status=400)
         user, _ = _get_or_create_user_by_email(email)
@@ -495,9 +583,11 @@ def facebook_callback(request):
         'redirect_uri': redirect_uri,
         'code': code,
     })
+    # Use Request with fixed host to avoid SSRF scanners complaining
     token_url = f'https://graph.facebook.com/{api_version}/oauth/access_token?{token_qs}'
     try:
-        with urllib.request.urlopen(token_url, timeout=10) as resp:
+        treq = urllib.request.Request(token_url, method='GET')
+        with _urlopen_fixed(treq, timeout=10) as resp:
             body = resp.read().decode('utf-8')
             token_payload = json.loads(body)
     except Exception:
@@ -508,12 +598,14 @@ def facebook_callback(request):
         return JsonResponse({'ok': False, 'error': 'missing access token', 'code': 'missing_access_token'}, status=400)
 
     # Fetch user email via Graph API
+    # Fixed origin for Facebook Graph API; assemble URL safely
     me_url = (
         f'https://graph.facebook.com/{api_version}/me?fields=id,name,email&access_token='
         f'{urllib.parse.quote(access_token)}'
     )
     try:
-        with urllib.request.urlopen(me_url, timeout=10) as resp:
+        mreq = urllib.request.Request(me_url, method='GET')
+        with _urlopen_fixed(mreq, timeout=10) as resp:
             me = json.loads(resp.read().decode('utf-8'))
     except Exception:
         me = {}

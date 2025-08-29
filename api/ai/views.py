@@ -8,6 +8,9 @@ from .models import AIJob
 from .tasks import run_plan, run_write, run_revise, run_format
 from .provider import get_provider
 from django.db.models import QuerySet
+from typing import Optional
+from orgs.models import Organization
+from billing.quota import get_subscription_for_scope
 
 
 @api_view(["POST"])
@@ -48,6 +51,23 @@ def plan(request):
 @api_view(["POST"])
 @permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
 def write(request):
+    # Enforce minimal plan gating outside DEBUG: free tier blocked for AI writes
+    if not settings.DEBUG:
+        user = getattr(request, 'user', None)
+        if not getattr(user, 'is_authenticated', False):
+            return Response({"error": "unauthorized"}, status=401)
+        org: Optional[Organization] = None
+        org_id = request.META.get('HTTP_X_ORG_ID', '')
+        if org_id and str(org_id).isdigit():
+            try:
+                org = Organization.objects.filter(id=int(org_id)).first()
+            except Exception:
+                org = None
+        tier, _status = get_subscription_for_scope(user, org)
+        if tier == 'free':
+            resp = Response({"error": "quota_exceeded", "reason": "ai_requires_pro"}, status=402)
+            resp["X-Quota-Reason"] = "ai_requires_pro"
+            return resp
     section_id = sanitize_text(request.data.get("section_id"), max_len=128)
     proposal_id = None
     try:
@@ -92,6 +112,23 @@ def write(request):
 @api_view(["POST"])
 @permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
 def revise(request):
+    # Enforce minimal plan gating outside DEBUG
+    if not settings.DEBUG:
+        user = getattr(request, 'user', None)
+        if not getattr(user, 'is_authenticated', False):
+            return Response({"error": "unauthorized"}, status=401)
+        org: Optional[Organization] = None
+        org_id = request.META.get('HTTP_X_ORG_ID', '')
+        if org_id and str(org_id).isdigit():
+            try:
+                org = Organization.objects.filter(id=int(org_id)).first()
+            except Exception:
+                org = None
+        tier, _status = get_subscription_for_scope(user, org)
+        if tier == 'free':
+            resp = Response({"error": "quota_exceeded", "reason": "ai_requires_pro"}, status=402)
+            resp["X-Quota-Reason"] = "ai_requires_pro"
+            return resp
     change_request = sanitize_text(request.data.get("change_request", ""), max_len=4000)
     base_text = sanitize_text(request.data.get("base_text", ""), max_len=20000, neutralize_injection=False)
     section_id = sanitize_text(request.data.get("section_id"), max_len=128)
@@ -138,6 +175,23 @@ def revise(request):
 @api_view(["POST"])
 @permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
 def format(request):
+    # Enforce minimal plan gating outside DEBUG
+    if not settings.DEBUG:
+        user = getattr(request, 'user', None)
+        if not getattr(user, 'is_authenticated', False):
+            return Response({"error": "unauthorized"}, status=401)
+        org: Optional[Organization] = None
+        org_id = request.META.get('HTTP_X_ORG_ID', '')
+        if org_id and str(org_id).isdigit():
+            try:
+                org = Organization.objects.filter(id=int(org_id)).first()
+            except Exception:
+                org = None
+        tier, _status = get_subscription_for_scope(user, org)
+        if tier == 'free':
+            resp = Response({"error": "quota_exceeded", "reason": "ai_requires_pro"}, status=402)
+            resp["X-Quota-Reason"] = "ai_requires_pro"
+            return resp
     # Final formatting across the whole composed text; optional template hint
     full_text = sanitize_text(request.data.get("full_text", ""), max_len=200000, neutralize_injection=False)
     template_hint = sanitize_text(request.data.get("template_hint", None), max_len=256) if request.data else None

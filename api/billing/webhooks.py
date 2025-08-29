@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from orgs.models import Organization
@@ -13,7 +14,11 @@ except Exception:  # pragma: no cover
     stripe = None
 
 
-@csrf_exempt
+@require_POST
+@csrf_exempt  # Stripe sends cross-origin POSTs; CSRF token cannot be present.
+# Compensating controls:
+#  - Signature verification with STRIPE_WEBHOOK_SECRET in non-DEBUG
+#  - POST-only; rejects unsigned in production; payload is parsed as JSON dict
 def stripe_webhook(request):
     payload = request.body.decode('utf-8')
     sig_header = request.META.get('HTTP_STRIPE_SIGNATURE', '')
@@ -177,8 +182,9 @@ def stripe_webhook(request):
         def _extract_discount(obj: dict):
             try:
                 disc = obj.get('discount')
-                if not disc and isinstance(obj.get('discounts'), list) and obj.get('discounts'):
-                    disc = obj.get('discounts')[0]
+                discounts = obj.get('discounts')
+                if not disc and isinstance(discounts, list) and len(discounts) > 0:
+                    disc = discounts[0]
                 if not isinstance(disc, dict):
                     # Some SDKs return Discount objects; fall back to dict conversion
                     disc = disc.to_dict() if hasattr(disc, 'to_dict') else None  # type: ignore[attr-defined]
@@ -209,7 +215,7 @@ def stripe_webhook(request):
         if owner_user and not sub.owner_user and not sub.owner_org:
             sub.owner_user = owner_user
         if owner_org and not sub.owner_org and not sub.owner_user:
-            sub.owner_org = owner_org
+            sub.owner_org = owner_org  # type: ignore[assignment]
         if cust_id:
             sub.stripe_customer_id = cust_id
         if sub_id:
@@ -226,7 +232,7 @@ def stripe_webhook(request):
             sub.seats = qty
         disc_summary = _extract_discount(data)
         if disc_summary is not None:
-            sub.discount = disc_summary
+            sub.discount = disc_summary  # type: ignore[assignment]
         sub.save()
 
     event_type = event.get('type', '') if isinstance(event, dict) else getattr(event, 'type', '')

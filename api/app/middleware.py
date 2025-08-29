@@ -58,10 +58,14 @@ class SecurityHeadersMiddleware(MiddlewareMixin):
             extra_script = ' ' + ' '.join(settings.CSP_SCRIPT_SRC) if getattr(settings, 'CSP_SCRIPT_SRC', None) else ''
             extra_style = ' ' + ' '.join(settings.CSP_STYLE_SRC) if getattr(settings, 'CSP_STYLE_SRC', None) else ''
             extra_connect = ' ' + ' '.join(settings.CSP_CONNECT_SRC) if getattr(settings, 'CSP_CONNECT_SRC', None) else ''
+            # Avoid allowing inline styles by default. If an emergency requires it, set
+            # CSP_ALLOW_INLINE_STYLES=1 in the environment (not recommended).
+            allow_inline = getattr(settings, 'CSP_ALLOW_INLINE_STYLES', False)
+            style_src = "style-src 'self'" + (" 'unsafe-inline'" if allow_inline else "") + (extra_style or "")
             csp = (
                 "default-src 'self'; "
                 f"script-src 'self'{extra_script}; "
-                f"style-src 'self' 'unsafe-inline'{extra_style}; "
+                f"{style_src}; "
                 "img-src 'self' data:; "
                 "font-src 'self' data:; "
                 # Allow only same-origin by default; extend via CSP_CONNECT_SRC allow-list

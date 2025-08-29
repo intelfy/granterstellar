@@ -18,6 +18,7 @@ This README covers the full application (SPA + API + DB). For the docs index, se
 - Backend: Django + DRF, Postgres, optional Celery/Redis
 - Frontend: React (Vite)
 - AI: Provider abstraction (GPT-5 plans/writes, Gemini formats/polishes)
+- AI: Provider abstraction (GPT-5 plans/writes, Gemini formats/polishes). In non-DEBUG, AI write/revise/format require a Pro/Enterprise plan; free tier is blocked with HTTP 402 and `X-Quota-Reason: ai_requires_pro`.
 - Billing: Stripe subscriptions + bundles + customer portal/webhooks
 - Exports: Canonical Markdown → DOCX/PDF, deterministic outputs/checksums
 - OCR: PDFs via pdfminer; optional image OCR via pytesseract/PIL; optional PDF OCR via `ocrmypdf` (behind flags)
@@ -57,7 +58,13 @@ The SPA calls `/api` by default. When running API separately, set `VITE_API_BASE
 - Quotas: `QUOTA_FREE_ACTIVE_CAP`, `QUOTA_PRO_MONTHLY_CAP`, `QUOTA_PRO_PER_SEAT`, `QUOTA_ENTERPRISE_MONTHLY_CAP`
 - OCR: `OCR_IMAGE`, `OCR_PDF`
 - CSP: `CSP_SCRIPT_SRC`, `CSP_STYLE_SRC`, `CSP_CONNECT_SRC` (comma-separated; `'self'` auto-added)
+ - CSP: `CSP_SCRIPT_SRC`, `CSP_STYLE_SRC`, `CSP_CONNECT_SRC` (comma-separated; `'self'` auto-added), `CSP_ALLOW_INLINE_STYLES` (0/1; default 0)
 - Orgs/Invites: `ORG_INVITE_TTL_DAYS` (invite expiry, days), `ORG_INVITES_PER_HOUR` (per-org rate limit), `APP_HOSTS` (hosts where `/` redirects to `/app`).
+
+AI usage and scope
+- Scope: For org-scoped requests, pass the header `X-Org-ID: <org_id>`; otherwise usage applies to the personal scope.
+- Gating: In production (DEBUG=0), AI endpoints `/api/ai/write`, `/api/ai/revise`, `/api/ai/format` require an active Pro/Enterprise subscription in the selected scope. Free tier receives HTTP 402 with header `X-Quota-Reason: ai_requires_pro`.
+- Async (optional): Set `AI_ASYNC=1` and a Celery broker/backend to offload AI calls. Endpoints respond with `{ "job_id": <id> }` and you can poll `/api/ai/jobs/{id}`.
 
 Environment variables — quick reference
 - APP_HOSTS: Comma‑separated hostnames where visiting `/` should 301‑redirect to the SPA at `/app`. Leave empty to serve the static landing at `/`. Example: `APP_HOSTS=forgranted.io`.
