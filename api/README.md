@@ -68,7 +68,7 @@ api = APIClient()
 tr = api.post('/api/token', {'username':'demo','password':'demo12345'}, format='json')
 print('token:', tr.status_code, list(getattr(tr,'data',{}).keys()))
 
-# AI stubs
+# AI endpoints
 print('ai/plan:', api.post('/api/ai/plan', {'grant_url':'https://example.com/grant'}, format='json').status_code)
 
 # Create an export (pdf) for first proposal if any
@@ -118,7 +118,7 @@ python manage.py test -v 2 accounts.tests.test_health \
 Maintenance
 - Period enforcement safety-net (runs if webhooks are missed):
   - python manage.py enforce_subscription_periods
-- AI (stubs):
+# AI endpoints:
   - POST /api/ai/plan
   - POST /api/ai/write
   - POST /api/ai/revise
@@ -141,3 +141,5 @@ Async (optional):
 
 ## Settings of note
 - FAILED_PAYMENT_GRACE_DAYS: when > 0, a subscription in past_due remains treated as active within the grace window for quota checks.
+- FILE_UPLOAD_MAX_BYTES: hard cap enforced by the upload API (413 on overflow). If unset, falls back to FILE_UPLOAD_MAX_MEMORY_SIZE.
+- TEXT_EXTRACTION_MAX_BYTES: upper bound for txt/docx/pdf parsing; protects CPU/memory.

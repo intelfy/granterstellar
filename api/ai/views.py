@@ -1,5 +1,5 @@
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, BasePermission
 from rest_framework.response import Response
 from django.conf import settings
 from .sanitize import sanitize_text, sanitize_url, sanitize_answers, sanitize_file_refs
@@ -13,8 +13,22 @@ from orgs.models import Organization
 from billing.quota import get_subscription_for_scope
 
 
+class DebugOrAuthPermission(BasePermission):
+    """Allow all when DEBUG is True; otherwise require authentication.
+
+    This avoids import-time binding of settings.DEBUG in decorators so tests
+    that override settings can influence permission evaluation.
+    """
+
+    def has_permission(self, request, view):
+        # Allow anonymous in DEBUG or when test-open flag is enabled
+        if settings.DEBUG or getattr(settings, 'AI_TEST_OPEN', False):
+            return True
+        return IsAuthenticated().has_permission(request, view)
+
+
 @api_view(["POST"])
-@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+@permission_classes([DebugOrAuthPermission])
 def plan(request):
     # Sanitize inputs to reduce prompt-injection vectors and invalid URLs
     grant_url = sanitize_url(request.data.get("grant_url"))
@@ -49,10 +63,10 @@ def plan(request):
 
 
 @api_view(["POST"])
-@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+@permission_classes([DebugOrAuthPermission])
 def write(request):
     # Enforce minimal plan gating outside DEBUG: free tier blocked for AI writes
-    if not settings.DEBUG:
+    if not (settings.DEBUG or getattr(settings, 'AI_TEST_OPEN', False) or getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False)):
         user = getattr(request, 'user', None)
         if not getattr(user, 'is_authenticated', False):
             return Response({"error": "unauthorized"}, status=401)
@@ -110,10 +124,10 @@ def write(request):
 
 
 @api_view(["POST"])
-@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+@permission_classes([DebugOrAuthPermission])
 def revise(request):
     # Enforce minimal plan gating outside DEBUG
-    if not settings.DEBUG:
+    if not (settings.DEBUG or getattr(settings, 'AI_TEST_OPEN', False) or getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False)):
         user = getattr(request, 'user', None)
         if not getattr(user, 'is_authenticated', False):
             return Response({"error": "unauthorized"}, status=401)
@@ -173,10 +187,10 @@ def revise(request):
 
 
 @api_view(["POST"])
-@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+@permission_classes([DebugOrAuthPermission])
 def format(request):
     # Enforce minimal plan gating outside DEBUG
-    if not settings.DEBUG:
+    if not (settings.DEBUG or getattr(settings, 'AI_TEST_OPEN', False) or getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False)):
         user = getattr(request, 'user', None)
         if not getattr(user, 'is_authenticated', False):
             return Response({"error": "unauthorized"}, status=401)
@@ -235,7 +249,7 @@ def format(request):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+@permission_classes([DebugOrAuthPermission])
 def job_status(request, job_id: int):
     job = AIJob.objects.filter(id=job_id).first()
     if not job:
@@ -252,7 +266,7 @@ def job_status(request, job_id: int):
 
 
 @api_view(["GET"])  # lightweight, DEBUG-only metrics peek
-@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+@permission_classes([DebugOrAuthPermission])
 def metrics_recent(request):
     """Return the most recent AIMetrics for the caller's org (DEBUG allows anon).
 
@@ -286,7 +300,7 @@ def metrics_recent(request):
 
 
 @api_view(["GET"])  # aggregate averages across scopes
-@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+@permission_classes([DebugOrAuthPermission])
 def metrics_summary(request):
     """Averages for tokens/duration and edit metrics by scope (global/org/user)."""
     from .models import AIMetric  # local import

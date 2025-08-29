@@ -103,10 +103,10 @@ CREATE POLICY proposals_write ON proposals_proposal
 DROP POLICY IF EXISTS subscriptions_read ON billing_subscription;
 CREATE POLICY subscriptions_read ON billing_subscription
     FOR SELECT USING (
-        (owner_user IS NOT NULL AND owner_user = app.current_user_id())
+        (owner_user_id IS NOT NULL AND owner_user_id = app.current_user_id())
         OR (
-            owner_org IS NOT NULL AND EXISTS (
-                SELECT 1 FROM orgs_organization o WHERE o.id = billing_subscription.owner_org AND o.admin_id = app.current_user_id()
+            owner_org_id IS NOT NULL AND EXISTS (
+                SELECT 1 FROM orgs_organization o WHERE o.id = billing_subscription.owner_org_id AND o.admin_id = app.current_user_id()
             )
         )
     );
@@ -114,17 +114,17 @@ CREATE POLICY subscriptions_read ON billing_subscription
 DROP POLICY IF EXISTS subscriptions_write ON billing_subscription;
 CREATE POLICY subscriptions_write ON billing_subscription
     FOR ALL USING (
-        (owner_user IS NOT NULL AND owner_user = app.current_user_id())
+        (owner_user_id IS NOT NULL AND owner_user_id = app.current_user_id())
         OR (
-            owner_org IS NOT NULL AND EXISTS (
-                SELECT 1 FROM orgs_organization o WHERE o.id = billing_subscription.owner_org AND o.admin_id = app.current_user_id()
+            owner_org_id IS NOT NULL AND EXISTS (
+                SELECT 1 FROM orgs_organization o WHERE o.id = billing_subscription.owner_org_id AND o.admin_id = app.current_user_id()
             )
         )
     ) WITH CHECK (
-        (owner_user IS NOT NULL AND owner_user = app.current_user_id())
+        (owner_user_id IS NOT NULL AND owner_user_id = app.current_user_id())
         OR (
-            owner_org IS NOT NULL AND EXISTS (
-                SELECT 1 FROM orgs_organization o WHERE o.id = billing_subscription.owner_org AND o.admin_id = app.current_user_id()
+            owner_org_id IS NOT NULL AND EXISTS (
+                SELECT 1 FROM orgs_organization o WHERE o.id = billing_subscription.owner_org_id AND o.admin_id = app.current_user_id()
             )
         )
     );

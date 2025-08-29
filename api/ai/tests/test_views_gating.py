@@ -12,7 +12,7 @@ class AIGatingTests(TestCase):
         # Endpoints may be AllowAny when DEBUG at import time; authenticate anyway for clarity
         self.api.force_authenticate(user=self.user)
 
-    @override_settings(DEBUG=False)
+    @override_settings(DEBUG=False, AI_TEST_OPEN=False)
     @patch("ai.views.get_subscription_for_scope", return_value=("free", "inactive"))
     def test_free_tier_blocks_ai_endpoints(self, _mock_sub):
         # write

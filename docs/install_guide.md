@@ -77,11 +77,13 @@ VITE_UI_EXPERIMENTS=0
 CSP_SCRIPT_SRC=
 CSP_STYLE_SRC=
 CSP_CONNECT_SRC=
+# Temporary escape hatch for inline CSS; default off (0)
+CSP_ALLOW_INLINE_STYLES=0
 
 # App hosts that should redirect / → /app (comma-separated hostnames)
 APP_HOSTS=
 
-# Async (set to 1 only if you run a Celery worker)
+# Async (optional; set to 1 only if you run a Celery worker)
 EXPORTS_ASYNC=0
 AI_ASYNC=0
 CELERY_BROKER_URL=
@@ -95,10 +97,14 @@ JWT_SIGNING_KEY=
 # DRF throttles (optional)
 DRF_THROTTLE_USER=100/min
 DRF_THROTTLE_ANON=20/min
+DRF_THROTTLE_LOGIN=10/min
+# DRF_THROTTLE_LOGIN controls a scoped rate limit for the JWT login endpoint (/api/token),
+# enforced by ScopedRateThrottle with scope="login" to deter brute‑force attempts.
 
 # Uploads & OCR (optional)
-FILE_UPLOAD_MAX_MEMORY_SIZE=10485760
 FILE_UPLOAD_MAX_BYTES=10485760
+# Django in-memory threshold; also used as fallback when FILE_UPLOAD_MAX_BYTES is unset
+FILE_UPLOAD_MAX_MEMORY_SIZE=10485760
 TEXT_EXTRACTION_MAX_BYTES=8388608
 ALLOWED_UPLOAD_EXTENSIONS=pdf,png,jpg,jpeg,docx,txt
 OCR_IMAGE=0
@@ -122,32 +128,18 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 OAUTH_REDIRECT_URI=https://app.example.com/api/oauth/google/callback
 GOOGLE_JWKS_URL=https://www.googleapis.com/oauth2/v3/certs
-## OAuth (GitHub & Facebook)
-
-You can enable additional providers for sign‑in.
-
-GitHub
-- Create an OAuth App at https://github.com/settings/developers
-- Set Authorization callback URL to: http://127.0.0.1:8000/api/oauth/github/callback (adjust host in prod)
-- Configure env:
-   - GITHUB_CLIENT_ID
-   - GITHUB_CLIENT_SECRET
-   - GITHUB_REDIRECT_URI
-
-Facebook
-- Create an app at https://developers.facebook.com/apps
-- Add “Facebook Login” product and configure Valid OAuth Redirect URIs:
-   - http://127.0.0.1:8000/api/oauth/facebook/callback (adjust host in prod)
-- Configure env:
-   - FACEBOOK_APP_ID
-   - FACEBOOK_APP_SECRET
-   - FACEBOOK_REDIRECT_URI
-   - FACEBOOK_API_VERSION (optional, defaults to v12.0)
-
-Notes
-- In DEBUG without secrets, both callbacks accept an `email` parameter for local testing.
-- SPA buttons and URL validation for Google/GitHub/Facebook are wired; ensure VITE_API_BASE points to the API origin.
 GOOGLE_ISSUER=https://accounts.google.com
+
+# --- OAuth (GitHub & Facebook) notes (uncomment and set if you enable these providers) ---
+# GITHUB_CLIENT_ID=
+# GITHUB_CLIENT_SECRET=
+# GITHUB_REDIRECT_URI=
+# FACEBOOK_APP_ID=
+# FACEBOOK_APP_SECRET=
+# FACEBOOK_REDIRECT_URI=
+# FACEBOOK_API_VERSION=v12.0
+# In DEBUG without secrets, callbacks accept an `email` parameter for local testing.
+# Ensure VITE_API_BASE points to the API origin.
 
 # Email for invites (SMTP)
 INVITE_SENDER_DOMAIN=mg.yourdomain.com
@@ -175,6 +167,10 @@ AI_PROVIDER=
 OPENAI_API_KEY=
 GEMINI_API_KEY=
 ```
+ 
+Uploads cap enforcement
+- The upload API enforces FILE_UPLOAD_MAX_BYTES as the hard cap. If unset, it falls back to FILE_UPLOAD_MAX_MEMORY_SIZE.
+- TEXT_EXTRACTION_MAX_BYTES bounds parsing work for txt/docx/pdf.
 Environment variables reference (what they do and why)
 
 Host, routing, and origins
@@ -191,6 +187,7 @@ Host, routing, and origins
 - CORS_ALLOWED_ORIGINS / CSRF_TRUSTED_ORIGINS: Browser cross‑origin rules. List full origins (scheme + host, e.g., https://app.example.com) that can call the API/send cookies.
 - VITE_BASE_URL / VITE_ROUTER_BASE: How the SPA is served and routed. Keep defaults unless you have a custom CDN.
 
+ 
 Content Security Policy (CSP) allow‑lists
 - Defaults: The app ships a strict CSP that only allows same‑origin resources. These envs extend, not replace, the defaults.
 - Syntax: Comma‑separated URLs/hosts, no quotes. Do not include 'self' (it’s auto‑added).
@@ -220,9 +217,9 @@ Inline styles escape hatch
    - Optional (dev only): python manage.py seed_demo
 
 Smoke test
-- Visit https://app.example.com/healthz → ok
-- Visit https://app.example.com/app → SPA loads
-- Visit https://app.example.com/api/usage → JSON
+- Visit <https://app.example.com/healthz> → ok
+- Visit <https://app.example.com/app> → SPA loads
+- Visit <https://app.example.com/api/usage> → JSON
 
 Step 4 — Optional: Deploy a Celery worker (for async exports/AI)
 1) New Resource → Application → “Dockerfile” (same repo, api/Dockerfile).
@@ -243,36 +240,56 @@ If you want a separate waitlist page with double opt‑in via Mailgun:
    - NODE_ENV=production
 3) DNS for the landing domain should point to Coolify/Traefik.
 
+Landing server HTTPS and throttling (when running standalone)
+- The small Node landing server (`server.mjs`) can serve the static landing and waitlist endpoint by itself. In production it typically sits behind Traefik/Coolify with TLS termination.
+
+- If you run it directly, you can enable HTTPS and tune resource guards via environment variables:
+   - ENABLE_HTTPS=1: Start HTTPS when key/cert paths are provided.
+   - HTTPS_KEY_PATH, HTTPS_CERT_PATH: File paths to your TLS key and certificate.
+   - STATIC_FS_CONCURRENCY: Max concurrent static file streams (default 50).
+         - STATIC_RATE_LIMIT_MAX: Per‑IP GET/HEAD rate limit window cap (default 300 per 5 minutes).
+
+- When running behind Traefik, keep HTTP mode; TLS is terminated at the proxy. Security headers and CSP are still set by the server.
+
+- Umami analytics injection is validated: src must be https and end with `/script.js`, and website id is attribute‑escaped.
+
 Providers setup (copy‑paste friendly)
 
 Stripe
+ 
 1) Dashboard → Developers → API keys → set STRIPE_SECRET_KEY.
-2) Developers → Webhooks → Add endpoint: https://app.example.com/api/stripe/webhook; copy Signing secret → STRIPE_WEBHOOK_SECRET.
+
+2) Developers → Webhooks → Add endpoint: <https://app.example.com/api/stripe/webhook>; copy Signing secret → STRIPE_WEBHOOK_SECRET.
 3) Products/Prices → create prices; paste IDs into PRICE_* envs.
 4) Billing endpoints (server): /api/billing/checkout, /api/billing/portal, /api/billing/cancel, /api/billing/resume.
    - Immediate cancel: POST {"immediate": true} to /api/billing/cancel.
 5) Grace window: FAILED_PAYMENT_GRACE_DAYS controls Pro access during past_due.
 
 Google OAuth
-1) Google Cloud → OAuth client: web app. Authorized redirect URI: https://app.example.com/api/oauth/google/callback; Authorized JS origin: https://app.example.com.
+ 
+1) Google Cloud → OAuth client: web app. Authorized redirect URI: <https://app.example.com/api/oauth/google/callback>; Authorized JS origin: <https://app.example.com>.
 2) Copy client ID/secret → GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET and set OAUTH_REDIRECT_URI.
-3) DEBUG shortcut: in development without GOOGLE_CLIENT_SECRET, POST to /api/oauth/google/callback with form fields code=x&email=you@example.com to get tokens.
+3) DEBUG shortcut: in development without GOOGLE_CLIENT_SECRET, POST to `/api/oauth/google/callback` with form fields `code=x&email=you@example.com` to get tokens.
 
 Umami analytics (SPA)
+ 
 1) Set VITE_UMAMI_WEBSITE_ID and VITE_UMAMI_SRC. Also add the host to CSP_SCRIPT_SRC and CSP_CONNECT_SRC.
 
 Quotas
+ 
 - QUOTA_FREE_ACTIVE_CAP=1, QUOTA_PRO_MONTHLY_CAP=20, QUOTA_PRO_PER_SEAT=10, QUOTA_ENTERPRISE_MONTHLY_CAP= (empty for unlimited).
 - Check with GET /api/usage. On quota block, POST /api/proposals returns 402 with X-Quota-Reason.
 
 AI endpoints and gating
+ 
 - Scoping: Pass `X-Org-ID: <org_id>` to apply AI usage and subscription checks to an organization. Omit to use the personal scope.
 - Gating (production): `/api/ai/write`, `/api/ai/revise`, and `/api/ai/format` require a Pro/Enterprise plan in the chosen scope. Free tier requests are blocked with HTTP 402 and `X-Quota-Reason: ai_requires_pro`.
 - DEBUG bypass: When `DEBUG=1`, AI endpoints allow requests regardless of plan (useful for local development and tests).
 - Async (optional): With `AI_ASYNC=1` and Celery configured, AI calls return `{job_id}` and progress can be polled via `/api/ai/jobs/{id}`.
 
 Admin/operations
-- Add Coolify Scheduled Command (daily) to run: python manage.py enforce_subscription_periods
+ 
+- Add Coolify Scheduled Command (daily) to run: `python manage.py enforce_subscription_periods`
 - Backups: two options
    1) Enable managed Postgres backups in Coolify (recommended if available). Test restore.
    2) Self-managed dumps: mount a persistent volume at /backups and run the provided script daily.
@@ -280,13 +297,36 @@ Admin/operations
        - Compose example includes a 'backup' service that runs this daily and writes gzipped SQL files under /backups.
        - Point Duplicati (or your backup tool) at the /backups path to offload copies off-site.
 
+Media (uploads) backup
+ 
+- Include the /app/media volume in your backup strategy in addition to the database.
+- Simple snapshots: schedule a nightly job to archive MEDIA_ROOT using the helper script.
+      - Script (in repo): `scripts/media_backup.sh` (defaults SOURCE=/app/media, DEST=/backups/media)
+      - Mount a persistent volume or host path at /backups, and schedule a Coolify command:
+         - `bash scripts/media_backup.sh`
+      - Retention: set `RETAIN_DAYS` env on the app to control how many days to keep (default 30).
+- Alternative: rsync/object storage sync
+      - If you have an object store (e.g., S3), run a nightly sync of /app/media to a bucket path (server-side lifecycle keeps versions).
+      - Ensure server-side encryption and lifecycle rules (30–90 days) per your policy.
+- Restore procedure (snapshot tar.gz):
+   1) Stop app or put in maintenance.
+   2) Extract the desired archive into MEDIA_ROOT:
+       - tar -xzf /backups/media/media_HOST_YYYY-MM-DD_HHMMSS.tar.gz -C /app/media
+   3) Verify file ownership/permissions match the app user.
+   4) Start app; spot-check downloads and exports.
+- Hygiene & safety checks:
+      - Run `python manage.py list_orphaned_media` monthly and investigate large orphan counts.
+      - Consider excluding ephemeral export caches if you add any non-persistent temp dirs later.
+
 Uploads behavior and tuning
+ 
 - Oversized uploads: when a file exceeds FILE_UPLOAD_MAX_BYTES, the API returns HTTP 413 with `{ "error": "file_too_large", "limit": <bytes> }`.
 - Signature/MIME checks: png/jpg/jpeg/pdf/docx are validated with magic bytes and MIME guess; mismatches return 400 (`mismatched_signature` or `mismatched_content_type`).
 - Extraction limits: text/parse work is bounded by TEXT_EXTRACTION_MAX_BYTES to avoid heavy CPU/memory usage.
 - Optional virus scan: set VIRUSSCAN_CMD to a command template (use `{path}` placeholder). Non‑zero exit is treated as infected (400 `infected`); invocation errors fail closed (400 `scan_error`).
 
 Common mistakes (and fixes)
+ 
 - 403/CSRF or CORS errors: ensure CORS_ALLOWED_ORIGINS and CSRF_TRUSTED_ORIGINS include your https origin, no trailing slashes.
 - 400 on Google OAuth: OAUTH_REDIRECT_URI must exactly match Google console entry; use https.
 - Stripe webhook 401/400: set STRIPE_WEBHOOK_SECRET in production; in DEBUG webhooks accept unsigned JSON.
@@ -314,7 +354,24 @@ Two easy options:
      - DEBUG=1 SECRET_KEY=test DATABASE_URL=postgres://USER:PASS@HOST:5432/DB .venv/bin/python manage.py test -v 2 db_policies.tests
 
 Notes
+ 
 - If connection.vendor is not "postgresql", the suite is skipped by design.
 - Keep a disposable database for tests; they create/tear down data.
 
+## Least-privileged DB user (recommended)
+
+For production, use a dedicated Postgres role without BYPASSRLS and with only CRUD on application tables. See `docs/rls_postgres.md` for SQL and guidance.
+
 Last updated: 2025-08-29
+
+## Staging verification checklist — Stripe promos/coupons
+
+- Create a product and promotion code or coupon in Stripe (test mode).
+- Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` (test keys) in staging.
+- Create prices and wire IDs to `PRICE_*` envs.
+- Start a checkout with a promo code; complete payment in Stripe’s test UI.
+- Verify in app:
+   - `/api/usage` reflects `subscription.discount` (percent/amount and duration).
+   - Quotas remain correct (no unintended unlimited effects).
+      - Webhook events apply without errors and idempotently on retry.
+   - Run the customer portal; check that cancel/resume toggles persist via webhooks.

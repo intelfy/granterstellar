@@ -62,6 +62,11 @@ jobs:
             ai.tests.test_file_refs_prompting \
             ai.tests.test_views_format \
             ai.tests.test_metrics \
+            ai.tests.test_metrics_recent \
+            ai.tests.test_metrics_summary \
+            ai.tests.test_provider_context_and_metrics \
+            ai.tests.test_views_gating \
+            ai.tests.test_async_jobs \
             exports.tests.test_escape \
             files.tests.test_uploads_security
 

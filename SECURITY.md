@@ -1,7 +1,7 @@
-# Production Hardening Notes (Repo-only)
+# Security
 
-- Docker images exclude markdown documentation, tests, and source maps via `.dockerignore`.
-- SPA build disables source maps and uses hashed filenames.
-- Browsable API is disabled in production (JSON renderer only).
-- WhiteNoise serves fingerprinted assets with long cache.
-- Keep repository private to protect design docs and implementation notes.
+The canonical security policy lives at `.github/SECURITY.md`.
+
+For practical deployment guidance, see `docs/security_hardening.md`.
+
+If you find areas to improve our posture (headers, policies, configs), please use a private advisory per `.github/SECURITY.md`.

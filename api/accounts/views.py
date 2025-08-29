@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework.views import APIView
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework_simplejwt.views import TokenObtainPairView
 from django.conf import settings
 from billing.models import Subscription
 
@@ -30,6 +32,9 @@ class DebugTokenObtainPairView(APIView):
     In non-DEBUG environments, do not use this view.
     """
 
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
+
     def post(self, request, *args, **kwargs):
         serializer = TokenObtainPairSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -49,3 +54,9 @@ class DebugTokenObtainPairView(APIView):
                 sub.cancel_at_period_end = False
                 sub.save()
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
+
+
+class ThrottledTokenObtainPairView(TokenObtainPairView):
+    """JWT obtain pair view with scoped throttling to deter brute-force attempts."""
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'

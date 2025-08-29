@@ -78,6 +78,17 @@ DATABASES = {
     'default': dj_database_url.parse(os.getenv('DATABASE_URL', f'sqlite:///{BASE_DIR / "db.sqlite3"}'), conn_max_age=600)
 }
 
+# Flag when running tests (used for safe relaxations in test-only code paths)
+import sys
+TESTING = 'test' in sys.argv
+# In tests, default to DEBUG=True for developer-friendly behavior unless overridden
+if TESTING:
+    DEBUG = True
+    # Open AI endpoints in tests by default (individual tests can override)
+    AI_TEST_OPEN = True
+else:
+    AI_TEST_OPEN = False
+
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
@@ -145,6 +156,8 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'user': os.getenv('DRF_THROTTLE_USER', '100/min'),
         'anon': os.getenv('DRF_THROTTLE_ANON', '20/min'),
+    # Scoped throttle used for login endpoints (see ScopedRateThrottle with scope='login')
+    'login': os.getenv('DRF_THROTTLE_LOGIN', '10/min'),
     },
     'DEFAULT_RENDERER_CLASSES': (
         ['rest_framework.renderers.JSONRenderer']

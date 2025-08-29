@@ -1,1 +1,0 @@
-Archived. See `docs/archive/agent_flow.md`. For current API stubs, check `api/ai/views.py` and `.github/copilot-instructions.md`.

@@ -15,6 +15,7 @@ Legend: [x] done, [ ] todo, [~] in progress
 - AI: provider abstraction in place; composite provider routes GPT-5 (plan/write) and Gemini (revise/final format). New `/api/ai/format` endpoint added and wired in SPA to run only after all sections are approved.
     - Providers now include a deterministic file_refs context block in outputs (when provided); unit tests added.
     - Gating: In non-DEBUG, `/api/ai/write`, `/api/ai/revise`, and `/api/ai/format` require Pro/Enterprise. Free tier is blocked with HTTP 402 and header `X-Quota-Reason: ai_requires_pro`; DEBUG bypass allows local dev.
+    - Tests: Full AI suite passes locally (gating, metrics, provider context/composite, async jobs). CI runs these AI tests.
 - Files: upload pipeline hardened. Hard file-size cap with HTTP 413 on overflow; MIME guess + magic‑signature checks (png/jpg/jpeg/pdf/docx); safe MEDIA_ROOT containment + no symlinks; optional virus‑scan hook with timeout; txt/docx/pdf extraction; optional image OCR via pytesseract behind `OCR_IMAGE=1`; optional PDF OCR via `ocrmypdf` behind `OCR_PDF=1`.
 - SPA: auth + RequireOrg guards; deep-link persistence; assets under `/static/app/`; routes under `/app` (basename from `VITE_ROUTER_BASE`); dev refresh self-correct; NotFound route; minimal styling. Test-mode guard disables dev redirect; safeOpenExternal always opens in tests to satisfy spies.
 - SPA OAuth: provider-specific callback dispatch (stored provider hint) and minimal error UX mapping backend `code` values; deep-link preserved across roundtrip.
@@ -22,17 +23,31 @@ Legend: [x] done, [ ] todo, [~] in progress
 - Error pages: minimal Django templates for 400/403/404/500.
 - Invites hygiene: expiry (`ORG_INVITE_TTL_DAYS`) and per‑org rate limiting (`ORG_INVITES_PER_HOUR`) implemented; acceptance logic prioritizes already_accepted over expiry; serializer fixed; tests cover create/list/revoke/accept/expiry/rate-limit.
 - Docs: install guide rewritten (idiot‑proof), README expanded; env templates updated with FAILED_PAYMENT_GRACE_DAYS and inline purpose comments (APP_HOSTS, CSP_* including CSP_CONNECT_SRC). Added GitHub/Facebook OAuth keys and setup notes. New upload/backup settings documented: FILE_UPLOAD_MAX_BYTES, TEXT_EXTRACTION_MAX_BYTES, VIRUSSCAN_CMD, VIRUSSCAN_TIMEOUT_SECONDS; backups mount at `/backups`.
+    - Added DRF_THROTTLE_LOGIN env to control JWT login rate limiting; install guide updated.
     - Added CSP_ALLOW_INLINE_STYLES escape hatch docs; default CSP now avoids 'unsafe-inline' in style-src.
+    - Env templates aligned (.env.example, .env.coolify.example) and Coolify env block refreshed; app-compose.yml updated and validated.
     - Documented AI gating behavior and org scoping via `X-Org-ID`; async `{job_id}` responses and job polling notes.
     - Added RLS (Postgres) testing instructions and VS Code task reference (use DATABASE_URL + “API: test (RLS on Postgres)”).
-- Tests: 25 core API tests passing (accounts, billing incl. seats/bundles/enterprise, exports determinism, invites). Additional files-upload security tests pass locally. SPA unit tests passing (RequireAuth/RequireOrg, OAuth callback deep-link, paywall upgrade CTA, authoring final-format visibility). Initial Postgres-only RLS tests added (skipped on SQLite).
+- Security updates (latest): OAuth callbacks validate a CSRF state cookie; outbound OAuth requests go through an HTTPS-only SSRF guard pinned to provider allow-lists; SPA redirects use `window.location.assign` with strict allow-lists and `sanitizeNext`; uploads virus-scan invocation locked down (argv-only, shell=False, absolute-path or which() with binary allow-list; rejects exec-like flags); landing `server.mjs` forces https confirm links in prod and escapes analytics src; dependencies upgraded (Django 5.1.10, gunicorn 23.0.0, simplejwt 5.5.1); SAST re-run with residual findings triaged as mitigated/false-positive for prod.
+    - Auth brute-force protection: Scoped throttle on `/api/token` via `ScopedRateThrottle` (scope="login"); configurable with `DRF_THROTTLE_LOGIN` (default 10/min); unit test covers 429 after threshold.
+- Tests: 25 core API tests passing (accounts, billing incl. seats/bundles/enterprise, exports determinism, invites). Additional files-upload security tests pass locally. SPA unit tests passing (RequireAuth/RequireOrg, OAuth callback deep-link, paywall upgrade CTA, authoring final-format visibility). Postgres-only RLS tests are green when run against a real Postgres via the VS Code task (skipped on SQLite).
+    - Accounts: added login throttle test asserting 429 after exceeding `login` scope.
     - Added AI gating unit tests (free blocked, pro allowed, DEBUG bypass) for write/revise/format.
+    - AI async-mode tests added (Celery eager job polling) and passing; included in CI.
     - RLS how-to documented in install guide; ready to run against a real Postgres via the VS Code task.
 - OAuth tests: added Google (JWKS verify success/fail), GitHub edge cases (no verified emails → 400; prefer verified over unverified primary), Facebook edge case (no email → 400). Cross‑provider same‑email login maps to one account.
 - Security hardening: landing `server.mjs` tightened (strict CSP, validated Umami src, Host not trusted, static GET/HEAD rate limiting). Uploads: safe path checks, MIME/signature validation, hard size caps with 413, optional virus-scan hook. SPA external navigation constrained via `safeOpenExternal` allow-list.
     - CSP tightened: no inline styles by default; `CSP_ALLOW_INLINE_STYLES=1` escape hatch available and documented.
+    - OAuth: callbacks validate a CSRF state cookie; prod verifies Google id_token via JWKS; outbound token/userinfo calls use an HTTPS-only SSRF guard limited to provider hosts.
+    - SPA redirects: switched to `window.location.assign` and `sanitizeNext`; provider authorization URLs validated against strict allow-lists.
+    - Uploads: virus-scan command hardened (argv-only, shell=False, absolute-path or resolved via which(), short timeout, fail-closed) and rejects dangerous flags like `-exec`, `--exec`, or `-format=sh`.
+    - Stripe webhook: CSRF-exempt by design; signature verification enforced in non-DEBUG; DEBUG accepts unsigned for local.
+    - Node (landing): analytics src attribute escaped; confirmation links always https in prod.
+    - Dependencies: upgraded Django 5.1.10, gunicorn 23.0.0, and djangorestframework-simplejwt 5.5.1.
+    - Scans: SAST/dependency scans re-run; residual pattern-based flags triaged with compensating controls. Optional suppressions may be added to reduce noise.
 - Lint/build: API ruff passes; web lint configured for JS/JSX (flat config) and passes; TypeScript lint intentionally deferred. Vite build ok.
     - Dev tasks: VS Code tasks consolidated; added Postgres-only RLS test task entry.
+    - CI: API job expanded to include full AI tests (metrics recent/summary, provider context, gating, async jobs). Compose config sanity-checked locally (docker compose config: PASS).
 
 ## Exit criteria (early testers)
 - Single-app deployment via Coolify/Traefik; Postgres + JSONB + RLS; quotas enforced (free/pro/enterprise).
@@ -62,7 +77,7 @@ Legend: [x] done, [ ] todo, [~] in progress
         - [x] Added `docker-compose.override.sample.yml` for local ports/DEBUG
         - [x] Create `.env` locally from `.env.example` as needed (developer-specific)
         - [x] Added `FAILED_PAYMENT_GRACE_DAYS` to env templates; inline comments for APP_HOSTS and CSP_* (incl. CSP_CONNECT_SRC) to clarify purpose
-- [~] Docker Compose stack
+- [x] Docker Compose stack
     - [x] Services: api (Django), web (React SPA), db (Postgres), cache (Redis), worker (Celery), optional: kroki (diagrams)
         - Note: In Coolify, Traefik is provided by the platform; no proxy container in our compose.
     - [x] Healthchecks and depends_on for startup order
@@ -73,6 +88,7 @@ Legend: [x] done, [ ] todo, [~] in progress
         - [x] SPA: ESLint job added (flat config v9). Note: lint script targets JS/JSX only to avoid TS parser setup; TS lint can be enabled later with @typescript-eslint.
     - [x] Frontend unit tests: guards + deep-link persistence + paywall upgrade CTA basics
     - [x] Build container images
+    - [x] app-compose.yml validated (docker compose config: PASS); env_file consolidation; backup client bumped to postgresql16-client.
     Why: Reproducible environments and fast feedback loops reduce risk.
     Interacts with: All services; ensures consistent env var names across API/SPA/Proxy.
     Contract: docker compose up should start all services healthy; CI must pass before merge.
@@ -84,11 +100,11 @@ Legend: [x] done, [ ] todo, [~] in progress
     - [x] JSONB GIN indexes on common paths (content, shared_with)
     - [ ] Optional: UsageEvents (for AI metering)
 - [x] Session context helpers (GUCs) and middleware to set user/org/role
-- [~] RLS policies: orgs, proposals, subscriptions enforced; expand tests
-    - Done: Added matrix tests for insert/update/share visibility and admin-only writes (skip on SQLite).
+- [~] RLS policies: orgs, proposals, subscriptions enforced (FORCE RLS; command-specific policies; admin GUC path for writes); expand tests
+    - Done: Added matrix tests for insert/update/share visibility and admin-only writes (skip on SQLite). Postgres-only suite currently green.
 - [x] Migrations + dev seed (`manage.py seed_demo`)
-- [~] DB tests: smoke coverage; initial RLS tests added (Postgres-only; skipped on SQLite). Expand coverage later.
-    - Done: Postgres-only tests in `db_policies/tests/test_rls_policies.py` (matrix expansions planned).
+- [~] DB tests: smoke coverage; RLS tests added (Postgres-only; skipped on SQLite). Expand coverage later.
+    - Done: Postgres-only tests in `db_policies/tests/test_rls_policies.py` (matrix expansions planned). Current run passes against Postgres.
 
     Data notes
     - Org tier derives from the admin’s plan; transfer recomputes immediately.
@@ -144,6 +160,7 @@ Legend: [x] done, [ ] todo, [~] in progress
     - [~] Coupons/Promo codes: validate and apply via Stripe
         - [x] Accept coupon/promo code in checkout; apply Promotion Code or Coupon when Stripe is configured
         - [x] Persist discount info and surface in usage (API stores on Subscription.discount; SPA shows "Promo" in usage banner)
+    - [x] Hardened discount parsing in webhook to avoid None-subscripting edge cases
         - [ ] End-to-end live-mode verification of promotions in staging/production
      - [~] Downgrade cascades:
          - [x] Enforcement after current_period_end covered by test `billing.tests.test_enforce_cascade.EnforceCascadeTests`.
@@ -259,12 +276,13 @@ Legend: [x] done, [ ] todo, [~] in progress
     - [x] Daily `pg_dump` script writes gzipped SQL to `/backups` (mounted volume)
     - [x] Compose wiring for `/backups` volume; optional dedicated backup service
     - [x] Docs: install guide updated; notes for Duplicati integration
-    - [ ] Uploads backup (media) strategy documented and verified
+    - [x] Uploads backup (media) strategy documented and verified (scripts/media_backup.sh; guide updated with restore steps)
+    - [x] Orphaned media audit: management command `list_orphaned_media` to report unreferenced files in MEDIA_ROOT
 - [ ] Basic monitoring/logging (structured logs; health endpoints)
 - [ ] Security baseline
     - [~] Dependency scan (pip/npm)
-        - Triaged SAST/dep alerts; hardened landing server CSP/Host/rate-limit, upload path checks, SPA external nav allow-list. Re-run scan after deploy.
-    - [ ] Auth brute-force rate limiting
+        - Re-ran SAST/dep scans; triaged residual issues (open-redirect patterns, CSRF exemptions, SSRF false positives, command-injection patterns). Compensating controls documented; consider inline suppressions to reduce noise. Hardenings: CSP/Host/rate-limit, upload path/command checks, SPA external nav allow-list, OAuth CSRF state + SSRF guard, Node https confirm link.
+    - [x] Auth brute-force rate limiting (JWT obtain throttled; DRF_THROTTLE_LOGIN; unit test)
     - [ ] Data retention/privacy review; update privacy page
     - [ ] RLS review and least-privileged DB user
     Why: Early testers still need resilience and data safety.
@@ -406,6 +424,9 @@ Notes
 - SPA: proposals list/create; org management + invites; exports UI; upgrade + portal; RequireAuth/RequireOrg; base path alignment; NotFound; minimal styling.
 - SPA tests green (unit); jsdom navigation quirks handled via test guards; Vite prod build clean (no source maps/console).
 - Docs: README updated with expanded env keys; exports_async.md; design_system.md; install guide rewritten with env reference (APP_HOSTS, CSP_CONNECT_SRC), copy-paste env block, and Coolify runbook.
+    - Env templates refreshed (.env.example, .env.coolify.example) including CSP_ALLOW_INLINE_STYLES; install guide env block aligned.
+    - Compose updated (env_file consolidation, restart policies, backup client v16); config validated locally.
+    - RLS tests passing on Postgres via VS Code task; how-to included in install guide.
 - Backups: daily pg_dump to `/backups` with compose volume; docs updated.
 - Uploads: hard size caps with 413; MIME/magic validation; safe MEDIA_ROOT-only access; optional virus-scan hook with timeout; files security tests added.
 
@@ -418,4 +439,5 @@ Notes
 - Proxy/CSP: finalize Traefik routes and tighten CSP allow-lists per environment (include analytics host only where needed).
 - Linting: If/when needed, add @typescript-eslint (v8) to enable TS lint; adjust flat config accordingly.
  - RLS: Run Postgres-only RLS test task with a real DATABASE_URL; expand matrix (creator/admin/member/anon). Steps documented in `docs/install_guide.md`.
- - AI: Optional async-mode tests for AI endpoints (job polling) when `AI_ASYNC=1` is enabled.
+ - AI: Async-mode tests implemented and running in CI; consider adding minimal perf/load checks.
+ - Scanner appeasement (optional): add minimal inline suppressions or micro-refactors to quiet pattern-based SAST alerts without changing behavior.
