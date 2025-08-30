@@ -262,6 +262,8 @@ Stripe
 2) Developers → Webhooks → Add endpoint: <https://app.example.com/api/stripe/webhook>; copy Signing secret → STRIPE_WEBHOOK_SECRET.
 3) Products/Prices → create prices; paste IDs into PRICE_* envs.
 4) Billing endpoints (server): /api/billing/checkout, /api/billing/portal, /api/billing/cancel, /api/billing/resume.
+   - Checkout returns `{ url, session_id }`. Use `url` to redirect. `session_id` can be used client-side as needed.
+   - In DEBUG, if `price_id` is omitted and Stripe is configured, a minimal test Product/Price may be auto-created for convenience.
    - Immediate cancel: POST {"immediate": true} to /api/billing/cancel.
 5) Grace window: FAILED_PAYMENT_GRACE_DAYS controls Pro access during past_due.
 

@@ -49,6 +49,23 @@ Use the included VS Code tasks:
 
 The SPA calls `/api` by default. When running API separately, set `VITE_API_BASE` to your API URL.
 
+### Stripe testing (local)
+
+- Start the API (DEBUG) and the web dev server via VS Code tasks.
+- Run Stripe CLI to forward webhooks to your API:
+	- `stripe listen --print-secret --forward-to http://127.0.0.1:8000/api/stripe/webhook`
+	- Paste the printed signing secret into `STRIPE_WEBHOOK_SECRET` for the API task.
+- Create a test Product/Price in your Stripe test dashboard (or via SDK).
+- Call POST `/api/billing/checkout` with `{ price_id }`.
+	- Response includes `{ url, session_id }` for Stripe Checkout.
+	- In DEBUG, if `price_id` is omitted and Stripe is configured, a minimal test Product/Price may be auto-created for convenience.
+
+Discounts & promotions
+
+- The API persists active discounts from Stripe on the subscription and returns them on `/api/usage`.
+- When Stripe removes a discount (subscription.updated with `discount: null`), the webhook clears it; the UI hides the promo banner automatically.
+- In local dev/tests, after opening Checkout, the Billing view refreshes usage to reflect changes faster. In production, webhooks drive consistency.
+
 ## SPA routing and base paths
 
 - Asset base: `VITE_BASE_URL` (default `/static/app/`) controls where built assets are served.

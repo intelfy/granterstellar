@@ -213,7 +213,33 @@ def checkout(request):
     success_url = (getattr(settings, 'PUBLIC_BASE_URL', '').rstrip('/') or 'http://localhost:8000') + "/app#/billing?success=1"
     cancel_url = (getattr(settings, 'PUBLIC_BASE_URL', '').rstrip('/') or 'http://localhost:8000') + "/app#/billing?canceled=1"
 
+    # In DEBUG, if Stripe is configured but no price_id provided/configured, auto-create a simple monthly Price
+    if (
+        settings.DEBUG
+        and stripe
+        and getattr(settings, 'STRIPE_SECRET_KEY', '').strip()
+        and not (price_id or '').strip()
+    ):
+        if settings.DEBUG:
+            print("[billing.checkout] DEBUG: No price_id provided; attempting to auto-create test product/price...")
+        try:
+            stripe.api_key = settings.STRIPE_SECRET_KEY  # type: ignore[attr-defined]
+            prod = stripe.Product.create(name="Granterstellar Local Pro (Dev)", description="Local dev subscription")  # type: ignore[attr-defined]
+            pr = stripe.Price.create(product=prod.id, unit_amount=500, currency="usd", recurring={"interval": "month"})  # type: ignore[attr-defined]
+            price_id = pr.get('id') if isinstance(pr, dict) else getattr(pr, 'id', '')
+            if settings.DEBUG:
+                print(f"[billing.checkout] DEBUG: Auto-created price id = {price_id}")
+        except Exception as e:
+            # Fall back to normal handling below; surface error in DEBUG for diagnosis
+            if settings.DEBUG:
+                print(f"[billing.checkout] Stripe auto-create price failed: {e}")
+
     if not stripe or not getattr(settings, 'STRIPE_SECRET_KEY', '').strip() or not price_id:
+        if settings.DEBUG:
+            print("[billing.checkout] DEBUG: Falling back to debug URL due to:")
+            print(f"  - stripe loaded: {bool(stripe)}")
+            print(f"  - STRIPE_SECRET_KEY set: {bool(getattr(settings, 'STRIPE_SECRET_KEY', '').strip())}")
+            print(f"  - price_id present: {bool(price_id)}")
         if settings.DEBUG:
             # Return a fake URL for UI wiring
             return Response({"url": f"{success_url}&debug-checkout=1"})
@@ -247,11 +273,15 @@ def checkout(request):
                 pass
         session = stripe.checkout.Session.create(**params)  # type: ignore[attr-defined]
         url = session.get('url') if isinstance(session, dict) else getattr(session, 'url', None)
+        session_id = session.get('id') if isinstance(session, dict) else getattr(session, 'id', None)
         if not url:
             return Response({"error": "no_url"}, status=500)
-        return Response({"url": url})
-    except Exception:
+        # Also return session id to help clients correlate and e2e test flows
+        return Response({"url": url, "session_id": session_id})
+    except Exception as e:
         if settings.DEBUG:
+            # Log the error to the console for local troubleshooting
+            print(f"[billing.checkout] Stripe checkout session failed: {e}")
             return Response({"url": f"{success_url}&debug-checkout=1"})
         return Response({"error": "checkout_failed"}, status=500)
 

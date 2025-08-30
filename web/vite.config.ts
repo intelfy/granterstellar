@@ -7,7 +7,10 @@ export default defineConfig(({ mode }) => {
   // For base here, we can read from process.env in Node context if types are available, or simply rely on default.
   // To avoid Node types, we leave base to default to '/static/' and allow overriding via define if needed.
   // Asset base (served by Django/WhiteNoise under /static/). We place SPA assets under /static/app/
-  const base = (mode && (globalThis as any)?.process?.env?.VITE_BASE_URL) || '/static/app/'
+  // In development, keep base at '/' to avoid dev-server redirects that conflict with Router basename '/app'.
+  // In production builds, default to '/static/app/' so Django serves assets under /static/app/.
+  const envBase = (globalThis as any)?.process?.env?.VITE_BASE_URL
+  const base = mode === 'development' ? (envBase || '/') : (envBase || '/static/app/')
   return {
     plugins: [react()],
     base,

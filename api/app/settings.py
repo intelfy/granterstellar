@@ -86,6 +86,9 @@ if TESTING:
     DEBUG = True
     # Open AI endpoints in tests by default (individual tests can override)
     AI_TEST_OPEN = True
+    # Always allow the Django test client host when running tests
+    if 'testserver' not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append('testserver')
 else:
     AI_TEST_OPEN = False
 
@@ -240,3 +243,10 @@ PRICE_PRO_YEARLY = os.getenv('PRICE_PRO_YEARLY', '').strip()
 PRICE_BUNDLE_1 = os.getenv('PRICE_BUNDLE_1', '').strip()
 PRICE_BUNDLE_10 = os.getenv('PRICE_BUNDLE_10', '').strip()
 PRICE_BUNDLE_25 = os.getenv('PRICE_BUNDLE_25', '').strip()
+
+# Stripe credentials and public base URL
+# Exposed so billing views can read them via django.conf.settings
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '').strip()
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '').strip()
+# Base URL used to compose success/cancel/return URLs (e.g., http://127.0.0.1:8000)
+PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '').strip()

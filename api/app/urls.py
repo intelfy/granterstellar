@@ -5,7 +5,7 @@ from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenRefreshView
 from pathlib import Path
 from django.conf import settings
-from accounts.views import me, DebugTokenObtainPairView, ThrottledTokenObtainPairView
+from accounts.views import MeView, DebugTokenObtainPairView, ThrottledTokenObtainPairView
 from billing.views import usage, customer_portal, checkout, cancel_subscription, resume_subscription
 from billing.webhooks import stripe_webhook
 from rest_framework.routers import DefaultRouter
@@ -27,7 +27,7 @@ router.register(r'orgs', OrganizationViewSet, basename='org')
 
 urlpatterns = [
     path('healthz', healthz),
-    path('api/me', me),
+    path('api/me', MeView.as_view()),
     # In DEBUG, route password logins through a view that marks the user as Pro tier for testing
     path('api/token', DebugTokenObtainPairView.as_view() if settings.DEBUG else ThrottledTokenObtainPairView.as_view()),
     path('api/token/refresh', TokenRefreshView.as_view()),

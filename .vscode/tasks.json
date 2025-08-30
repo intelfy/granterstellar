@@ -199,6 +199,40 @@
 			"group": "test",
 			"isBackground": true,
 			"problemMatcher": []
+		},
+		{
+			"label": "Dev: API (Stripe test env)",
+			"type": "shell",
+			"command": "cd api && DEBUG=1 SECRET_KEY=test STRIPE_SECRET_KEY=sk_test_51S14QXLEGz5pojCYom1waFKIZvynk8bC0xMeymPOA9NV0Z5g8XMtPlJxFP95Vu9mhTFSv2xX05qsxeYc5VU7vuLE00EtfQlUST STRIPE_WEBHOOK_SECRET=whsec_a3f72ee46d6387a5bcbfc64224246df68ea9270296205a11446c9195bad36a76 PUBLIC_BASE_URL=http://127.0.0.1:8000 .venv/bin/python manage.py runserver 127.0.0.1:8000",
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Dev: API (Stripe debug 8010)",
+			"type": "shell",
+			"command": "cd api && DEBUG=1 SECRET_KEY=test STRIPE_SECRET_KEY=sk_test_51S14QXLEGz5pojCYom1waFKIZvynk8bC0xMeymPOA9NV0Z5g8XMtPlJxFP95Vu9mhTFSv2xX05qsxeYc5VU7vuLE00EtfQlUST PUBLIC_BASE_URL=http://127.0.0.1:8010 .venv/bin/python manage.py runserver 127.0.0.1:8010",
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Billing: create checkout (demo, 1 seat)",
+			"type": "shell",
+			"command": "cd api && ACCESS=$(curl -sS -X POST http://127.0.0.1:8000/api/token -H 'Content-Type: application/json' -d '{\"username\":\"demo\",\"password\":\"demo12345\"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"access\"])') && echo \"Token ok\" && curl -sS -X POST http://127.0.0.1:8000/api/billing/checkout -H \"Authorization: Bearer $ACCESS\" -H 'Content-Type: application/json' -d '{\"quantity\":1}'",
+			"isBackground": false,
+			"group": "none"
+		},
+		{
+			"label": "Billing: Open Stripe Checkout (1 seat)",
+			"type": "shell",
+			"command": "cd api && ACCESS=$(curl -sS -X POST http://127.0.0.1:8000/api/token -H 'Content-Type: application/json' -d '{\"username\":\"stripeuser\",\"password\":\"test12345\"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"access\"])') && URL=$(curl -sS -X POST http://127.0.0.1:8000/api/billing/checkout -H \"Authorization: Bearer $ACCESS\" -H 'Content-Type: application/json' -d '{\"quantity\":1}' | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"url\"])') && echo \"Opening: $URL\" && open \"$URL\"",
+			"group": "none"
+		},
+		{
+			"label": "Stripe: Listen (forward → 8000)",
+			"type": "shell",
+			"command": "stripe listen --print-secret --forward-to http://127.0.0.1:8000/api/stripe/webhook",
+			"isBackground": true,
+			"group": "build"
 		}
 	]
 }

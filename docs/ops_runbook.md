@@ -18,7 +18,7 @@ VS Code tasks
 - Stripe webhooks
   - Symptom: subscription state not reflecting changes
   - Checks: logs around /api/stripe/webhook; verify STRIPE_WEBHOOK_SECRET in prod; replay event from Stripe dashboard
-  - Fix: In DEBUG, unsigned events are accepted; in prod, set correct signing secret and replay
+  - Fix: In DEBUG, unsigned events are accepted; in prod, set correct signing secret and replay. Locally, use Stripe CLI to forward events to `/api/stripe/webhook` and set the printed signing secret in the API env for parity.
 
 - Quotas/paywall
   - Symptom: free users blocked or over-cap, Pro caps not applied

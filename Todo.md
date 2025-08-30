@@ -1,4 +1,4 @@
-Granterstellar — Engineering Plan (cleaned 2025-08-29, updated end-of-day)
+# Granterstellar — Engineering Plan (cleaned 2025-08-29, updated end-of-day)
 
 Note: Docs have been consolidated. See `docs/README.md` for the active docs index. This file remains as an engineering plan/status log.
 
@@ -6,20 +6,26 @@ Note: High-level plan and status. For authoritative architecture and setup, see 
 
 Legend: [x] done, [ ] todo, [~] in progress
 
-## Current status (2025-08-29)
+## Current status (2025-08-30)
+
 - Backend stable: Django API with JWT + Google OAuth, proposals, orgs, exports, billing/quotas.
 - OAuth: Google, GitHub, and Facebook supported (prod-ready). Callbacks return structured JSON errors with `code`; cross‑provider account linking by email (case‑insensitive); invite acceptance honored when `state` carries an invite.
 - Billing: seat-based caps, extras bundles (1/10/25), enterprise allocations; webhook handling solid in DEBUG.
     - Immediate cancel supported via POST /api/billing/cancel {"immediate": true} with org cascade.
-    - Failed payment grace window honored for past_due via FAILED_PAYMENT_GRACE_DAYS (default 3). 
+    - Failed payment grace window honored for past_due via FAILED_PAYMENT_GRACE_DAYS (default 3).
 - AI: provider abstraction in place; composite provider routes GPT-5 (plan/write) and Gemini (revise/final format). New `/api/ai/format` endpoint added and wired in SPA to run only after all sections are approved.
     - Providers now include a deterministic file_refs context block in outputs (when provided); unit tests added.
     - Gating: In non-DEBUG, `/api/ai/write`, `/api/ai/revise`, and `/api/ai/format` require Pro/Enterprise. Free tier is blocked with HTTP 402 and header `X-Quota-Reason: ai_requires_pro`; DEBUG bypass allows local dev.
     - Tests: Full AI suite passes locally (gating, metrics, provider context/composite, async jobs). CI runs these AI tests.
 - Files: upload pipeline hardened. Hard file-size cap with HTTP 413 on overflow; MIME guess + magic‑signature checks (png/jpg/jpeg/pdf/docx); safe MEDIA_ROOT containment + no symlinks; optional virus‑scan hook with timeout; txt/docx/pdf extraction; optional image OCR via pytesseract behind `OCR_IMAGE=1`; optional PDF OCR via `ocrmypdf` behind `OCR_PDF=1`.
 - SPA: auth + RequireOrg guards; deep-link persistence; assets under `/static/app/`; routes under `/app` (basename from `VITE_ROUTER_BASE`); dev refresh self-correct; NotFound route; minimal styling. Test-mode guard disables dev redirect; safeOpenExternal always opens in tests to satisfy spies.
+    - Dev server running at <http://localhost:5173> with proxy to API (127.0.0.1:8000). Production build copied to `api/staticfiles/app/` so `/app` is served by Django/WhiteNoise.
+    - Login in dev supports username/password (demo/demo12345) alongside OAuth buttons; OAuth callback route wired and tested locally.
 - SPA OAuth: provider-specific callback dispatch (stored provider hint) and minimal error UX mapping backend `code` values; deep-link preserved across roundtrip.
 - Billing UX: usage payload now includes `subscription.discount`; SPA usage banner surfaces active promo (percent/amount and duration) when present.
+    - Checkout DX: endpoint now returns `session_id` in addition to `url`; in DEBUG, if no price_id is provided and Stripe is configured, a minimal test Product/Price is auto-created for local runs. Added DEBUG-only console logs to aid troubleshooting.
+    - Promotions lifecycle: webhook now clears `subscription.discount` when Stripe removes it (subscription.updated with `discount: null`); UI hides the promo banner accordingly.
+    - Local e2e verified (test mode): API + SPA + Stripe CLI (signed webhooks). Created a real Checkout Session, completed payment, and observed subscription upsert via webhook; `/api/usage` reflected `tier=pro`, `status=active` and seats.
 - Error pages: minimal Django templates for 400/403/404/500.
 - Invites hygiene: expiry (`ORG_INVITE_TTL_DAYS`) and per‑org rate limiting (`ORG_INVITES_PER_HOUR`) implemented; acceptance logic prioritizes already_accepted over expiry; serializer fixed; tests cover create/list/revoke/accept/expiry/rate-limit.
 - Docs: install guide rewritten (idiot‑proof), README expanded; env templates updated with FAILED_PAYMENT_GRACE_DAYS and inline purpose comments (APP_HOSTS, CSP_* including CSP_CONNECT_SRC). Added GitHub/Facebook OAuth keys and setup notes. New upload/backup settings documented: FILE_UPLOAD_MAX_BYTES, TEXT_EXTRACTION_MAX_BYTES, VIRUSSCAN_CMD, VIRUSSCAN_TIMEOUT_SECONDS; backups mount at `/backups`.
@@ -28,9 +34,12 @@ Legend: [x] done, [ ] todo, [~] in progress
     - Env templates aligned (.env.example, .env.coolify.example) and Coolify env block refreshed; app-compose.yml updated and validated.
     - Documented AI gating behavior and org scoping via `X-Org-ID`; async `{job_id}` responses and job polling notes.
     - Added RLS (Postgres) testing instructions and VS Code task reference (use DATABASE_URL + “API: test (RLS on Postgres)”).
+    - New selectors reference: `docs/style-docs.md` created to catalog stable UI selectors; markdown lint issues resolved (code-format tags/selectors, list spacing).
 - Security updates (latest): OAuth callbacks validate a CSRF state cookie; outbound OAuth requests go through an HTTPS-only SSRF guard pinned to provider allow-lists; SPA redirects use `window.location.assign` with strict allow-lists and `sanitizeNext`; uploads virus-scan invocation locked down (argv-only, shell=False, absolute-path or which() with binary allow-list; rejects exec-like flags); landing `server.mjs` forces https confirm links in prod and escapes analytics src; dependencies upgraded (Django 5.1.10, gunicorn 23.0.0, simplejwt 5.5.1); SAST re-run with residual findings triaged as mitigated/false-positive for prod.
     - Auth brute-force protection: Scoped throttle on `/api/token` via `ScopedRateThrottle` (scope="login"); configurable with `DRF_THROTTLE_LOGIN` (default 10/min); unit test covers 429 after threshold.
-- Tests: 25 core API tests passing (accounts, billing incl. seats/bundles/enterprise, exports determinism, invites). Additional files-upload security tests pass locally. SPA unit tests passing (RequireAuth/RequireOrg, OAuth callback deep-link, paywall upgrade CTA, authoring final-format visibility). Postgres-only RLS tests are green when run against a real Postgres via the VS Code task (skipped on SQLite).
+- Tests: 27 core API tests passing (accounts, billing incl. seats/bundles/enterprise/portal/webhooks, exports determinism, invites). Additional files-upload security tests pass locally. SPA unit tests passing (RequireAuth/RequireOrg, OAuth callback deep-link, paywall upgrade CTA, authoring final-format visibility, billing controls). Postgres-only RLS tests are green when run against a real Postgres via the VS Code task (skipped on SQLite). CI runs API/Web/Docs jobs.
+    - Discount lifecycle: API tests cover discount removal via webhook and `/api/usage` reflecting `discount=null`.
+    - SPA: promo banner test stabilized with `data-testid="promo-banner"` and `afterEach(cleanup)`; BillingPage triggers a usage refresh after opening Checkout in dev/tests for faster feedback.
     - Accounts: added login throttle test asserting 429 after exceeding `login` scope.
     - Added AI gating unit tests (free blocked, pro allowed, DEBUG bypass) for write/revise/format.
     - AI async-mode tests added (Celery eager job polling) and passing; included in CI.
@@ -50,24 +59,27 @@ Legend: [x] done, [ ] todo, [~] in progress
     - CI: API job expanded to include full AI tests (metrics recent/summary, provider context, gating, async jobs). Compose config sanity-checked locally (docker compose config: PASS).
 
 ## Exit criteria (early testers)
+
 - Single-app deployment via Coolify/Traefik; Postgres + JSONB + RLS; quotas enforced (free/pro/enterprise).
 - AI-assisted authoring loop stubs; deterministic exports (md/pdf/docx).
 - Basic org/user management with invites and admin transfer.
 
-0) Landing and Marketing [x]
+## Landing and Marketing [x]
+
 - [x] Simple landing page
 - [x] Email signup for waitlist
 - [x] Mailgun API to add emails
 - [x] Add Umami analytics to landing + SPA (self-hosted or cloud)
     - [x] Environment config for UMAMI_WEBSITE_ID and endpoint
-    - [x] Analytics host configured (https://data.intelfy.dk/script.js)
+    - [x] Analytics host configured (<https://data.intelfy.dk/script.js>)
     - [x] Cookie banner/update privacy page if required
     Why: Track funnels and feature adoption; align with privacy policy.
         Interacts with: SPA router, Traefik middlewares/headers (via Coolify), privacy.html.
     Security: Disable PII collection; respect Do Not Track.
     Notes (security): `server.mjs` validates `VITE_UMAMI_SRC` (must be https and end with /script.js), derives CSP allow-lists from that origin, avoids trusting Host header, and rate-limits static GET/HEAD.
 
-1) Platform Foundations (DevOps + Project skeleton)
+## Platform Foundations (DevOps + Project skeleton)
+
 - [x] Repository housekeeping
     - [x] .editorconfig, .gitignore, SECURITY.md (baseline)
     - [x] Pre-commit hooks (ruff for Python; eslint for JS); prettier/black/isort can be added later
@@ -86,7 +98,7 @@ Legend: [x] done, [ ] todo, [~] in progress
     - [x] Lint + unit tests for API and SPA
         - [x] API: Django test runner wired with a health check test
         - [x] SPA: ESLint job added (flat config v9). Note: lint script targets JS/JSX only to avoid TS parser setup; TS lint can be enabled later with @typescript-eslint.
-    - [x] Frontend unit tests: guards + deep-link persistence + paywall upgrade CTA basics
+    - [x] Frontend unit tests: guards + deep-link persistence + paywall upgrade CTA basics; Billing controls (cancel/resume) test
     - [x] Build container images
     - [x] app-compose.yml validated (docker compose config: PASS); env_file consolidation; backup client bumped to postgresql16-client.
     Why: Reproducible environments and fast feedback loops reduce risk.
@@ -94,7 +106,8 @@ Legend: [x] done, [ ] todo, [~] in progress
     Contract: docker compose up should start all services healthy; CI must pass before merge.
     Security: Secrets only via env; no tokens in repo; pinned base images.
 
-2) Database (PostgreSQL)
+## Database (PostgreSQL)
+
 - [x] Bootstrap Postgres (UTF-8, UTC) — via compose/env conventions
 - [x] Schema/models: Users, Organizations, OrgUsers, Proposals (JSONB), Subscriptions (seats), ExtraCredits
     - [x] JSONB GIN indexes on common paths (content, shared_with)
@@ -110,7 +123,7 @@ Legend: [x] done, [ ] todo, [~] in progress
     - Org tier derives from the admin’s plan; transfer recomputes immediately.
     - Proposal JSONB is the source of truth; keep migration-upgradable via schema_version.
 
-3) Backend API (Django)
+## Backend API (Django)
 - [x] Project scaffolding
     - [x] Django project + apps: accounts, orgs, proposals, billing, ai, exports, files
     - [x] Settings for Postgres (via dj-database-url), CORS/CSRF, static/media
@@ -160,6 +173,7 @@ Legend: [x] done, [ ] todo, [~] in progress
     - [~] Coupons/Promo codes: validate and apply via Stripe
         - [x] Accept coupon/promo code in checkout; apply Promotion Code or Coupon when Stripe is configured
         - [x] Persist discount info and surface in usage (API stores on Subscription.discount; SPA shows "Promo" in usage banner)
+        - [x] Webhook clears discount when removed by Stripe (subscription.updated with `discount: null`); tests added; SPA hides promo badge accordingly
     - [x] Hardened discount parsing in webhook to avoid None-subscripting edge cases
         - [ ] End-to-end live-mode verification of promotions in staging/production
      - [~] Downgrade cascades:

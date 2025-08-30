@@ -15,7 +15,7 @@ Purpose: Minimize tokens, maximize execution. This file targets agentic AI only.
 ## Core flows
 - Authoring: SPA collects answers → API AI draft/revise → autosave PATCH into JSONB.
 - Exports: POST /api/exports → canonical markdown → docx/pdf (deterministic; checksums).
-- Billing: Stripe checkout/portal/webhooks; quotas by plan/seat; extras bundles (1/10/25). Usage at GET /api/usage (respects X-Org-ID).
+- Billing: Stripe checkout/portal/webhooks; quotas by plan/seat; extras bundles (1/10/25). Usage at GET /api/usage (respects X-Org-ID). Checkout returns `{url, session_id}`. Discounts/promos are reflected on the subscription; when Stripe removes a discount (subscription.updated with `discount: null`), webhook clears it. For local tests, forward Stripe CLI to `/api/stripe/webhook` and set the printed signing secret in STRIPE_WEBHOOK_SECRET.
 - AI: provider abstraction (`ai/provider.py`). Default composite: GPT-5 plans/writes; Gemini formats/polishes. `file_refs` accepted; when present, outputs append deterministic `[context:sources]` with `- name: <ocr snippet>`. Optional async (`AI_ASYNC=1`): POST returns `{job_id}`, poll GET `/api/ai/jobs/{id}`.
 
 ## Access & RLS semantics
@@ -38,7 +38,8 @@ Purpose: Minimize tokens, maximize execution. This file targets agentic AI only.
 ## Frontend
 - Router base `/app` (`VITE_ROUTER_BASE`); asset base `/static/app/` (`VITE_BASE_URL`).
 - Dev-only UI experiments via `VITE_UI_EXPERIMENTS`. Umami optional via `VITE_UMAMI_*`.
-- Tests (Vitest/jsdom) rely on test-mode guards; avoid direct `location` changes in unit tests.
+- Tests (Vitest/jsdom) rely on test-mode guards; avoid direct `location` changes in unit tests. Use `data-testid="promo-banner"` for the discounts banner to avoid ambiguous text queries; ensure `afterEach(cleanup)` is applied in suites rendering the billing view.
+ - Maintain `docs/style-docs.md` as the canonical selector map for UI elements (ids/classes/testids/aria). When adding or changing UI, update that doc so styling can be applied later. Capture banners, error containers, and any dynamic content indicators there.
 
 ## Analytics & metrics
 - AI metrics v2 logged per call: tokens, duration, model, user, org, proposal_id, section_id.
@@ -68,6 +69,7 @@ Purpose: Minimize tokens, maximize execution. This file targets agentic AI only.
 - API: migrate; runserver (DEBUG); lint (ruff); tests (per-app); RLS tests on Postgres.
 - Web: dev; lint.
 - Celery worker (optional): requires Redis.
+ - Stripe: run a `stripe listen --print-secret --forward-to http://127.0.0.1:8000/api/stripe/webhook` session for local webhook parity; paste the secret into the API task env.
 
 ## Environment keys (high-impact)
 - Core: SECRET_KEY, DEBUG, ALLOWED_HOSTS, DATABASE_URL, REDIS_URL, PUBLIC_BASE_URL.

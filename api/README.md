@@ -110,7 +110,7 @@ python manage.py test -v 2 accounts.tests.test_health \
 - OAuth (scaffold): GET /api/oauth/google/start, GET /api/oauth/google/callback
 - GET /api/usage (X-Org-ID supported)
 - Billing: GET /api/billing/portal (Stripe portal; placeholder URL in DEBUG)
-          POST /api/billing/checkout (creates checkout session; DEBUG placeholder URL)
+          POST /api/billing/checkout (creates checkout session; returns { url, session_id })
           POST /api/billing/cancel (marks cancel at period end for current subscription)
           POST /api/billing/resume (clears cancel at period end)
           POST /api/stripe/webhook (Stripe events; requires signature in prod)
@@ -137,7 +137,9 @@ Async (optional):
 - DisallowedHost testserver: allowed automatically in DEBUG in settings.
 - 402 on POST /api/proposals: quota exceeded (free tier). Check /api/usage and X-Quota-Reason header.
 - Export file not found: ensure DEBUG=1 (serves media) or proper MEDIA settings in production.
-- Stripe webhook: in DEBUG without STRIPE_WEBHOOK_SECRET, unsigned events are accepted for local testing; in production, signature is required.
+- Stripe webhook: in DEBUG without STRIPE_WEBHOOK_SECRET, unsigned events are accepted for local testing; in production, signature is required. When using Stripe CLI locally, forward to `/api/stripe/webhook` and set the printed signing secret into STRIPE_WEBHOOK_SECRET for best parity.
+- Checkout response: use `url` to redirect users; `session_id` is provided for client-side Stripe integrations if you need to confirm status later.
+
 
 ## Settings of note
 - FAILED_PAYMENT_GRACE_DAYS: when > 0, a subscription in past_due remains treated as active within the grace window for quota checks.

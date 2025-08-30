@@ -6,6 +6,7 @@ Active docs
 - Full app overview + local dev: `README.md`
 - Contributor/agent guide: `.github/copilot-instructions.md`
 - Design rules (current policy): `docs/design_system.md`
+- UI selectors (for future styling; reference only): `docs/style-docs.md`
 - Exports async/Celery: `docs/exports_async.md`
 - Proposals model/endpoints and autosave: `docs/proposals.md`
 - Postgres RLS policies and least-privileged DB user: `docs/rls_postgres.md`
@@ -22,9 +23,11 @@ Archived (historical context)
 Notes
 
 - Prefer the active docs above; archived files may be outdated.
+- Front-end styling is deferred until the back-end is complete. Use `docs/style-docs.md` to locate stable selectors when implementing styles later.
 - Upload caps: see `docs/install_guide.md` (FILE_UPLOAD_MAX_BYTES, FILE_UPLOAD_MAX_MEMORY_SIZE fallback, TEXT_EXTRACTION_MAX_BYTES).
 - CSP and security headers: see `docs/security_hardening.md`.
 - Stripe/webhooks and quotas: see `docs/install_guide.md` and `README.md` for quick pointers.
+	- For local testing, see README “Stripe testing (local)” on using Stripe CLI and setting STRIPE_WEBHOOK_SECRET.
 
 Docs maintenance
 
