@@ -21,6 +21,7 @@ Legend: [x] done, [ ] todo, [~] in progress
 - SPA: auth + RequireOrg guards; deep-link persistence; assets under `/static/app/`; routes under `/app` (basename from `VITE_ROUTER_BASE`); dev refresh self-correct; NotFound route; minimal styling. Test-mode guard disables dev redirect; safeOpenExternal always opens in tests to satisfy spies.
     - Dev server running at <http://localhost:5173> with proxy to API (127.0.0.1:8000). Production build copied to `api/staticfiles/app/` so `/app` is served by Django/WhiteNoise.
     - Login in dev supports username/password (demo/demo12345) alongside OAuth buttons; OAuth callback route wired and tested locally.
+    - Invites: global banner detects `?invite=` post-auth and offers Accept/Dismiss; acceptance clears the URL param and refreshes app context. Stable selectors documented (`docs/style-docs.md`).
 - SPA OAuth: provider-specific callback dispatch (stored provider hint) and minimal error UX mapping backend `code` values; deep-link preserved across roundtrip.
 - Billing UX: usage payload now includes `subscription.discount`; SPA usage banner surfaces active promo (percent/amount and duration) when present.
     - Checkout DX: endpoint now returns `session_id` in addition to `url`; in DEBUG, if no price_id is provided and Stripe is configured, a minimal test Product/Price is auto-created for local runs. Added DEBUG-only console logs to aid troubleshooting.
@@ -37,7 +38,7 @@ Legend: [x] done, [ ] todo, [~] in progress
     - New selectors reference: `docs/style-docs.md` created to catalog stable UI selectors; markdown lint issues resolved (code-format tags/selectors, list spacing).
 - Security updates (latest): OAuth callbacks validate a CSRF state cookie; outbound OAuth requests go through an HTTPS-only SSRF guard pinned to provider allow-lists; SPA redirects use `window.location.assign` with strict allow-lists and `sanitizeNext`; uploads virus-scan invocation locked down (argv-only, shell=False, absolute-path or which() with binary allow-list; rejects exec-like flags); landing `server.mjs` forces https confirm links in prod and escapes analytics src; dependencies upgraded (Django 5.1.10, gunicorn 23.0.0, simplejwt 5.5.1); SAST re-run with residual findings triaged as mitigated/false-positive for prod.
     - Auth brute-force protection: Scoped throttle on `/api/token` via `ScopedRateThrottle` (scope="login"); configurable with `DRF_THROTTLE_LOGIN` (default 10/min); unit test covers 429 after threshold.
-- Tests: 27 core API tests passing (accounts, billing incl. seats/bundles/enterprise/portal/webhooks, exports determinism, invites). Additional files-upload security tests pass locally. SPA unit tests passing (RequireAuth/RequireOrg, OAuth callback deep-link, paywall upgrade CTA, authoring final-format visibility, billing controls). Postgres-only RLS tests are green when run against a real Postgres via the VS Code task (skipped on SQLite). CI runs API/Web/Docs jobs.
+- Tests: 28 core API tests passing (accounts, billing incl. seats/bundles/enterprise/portal/webhooks, exports determinism, invites). Additional files-upload security tests pass locally. SPA unit tests passing (RequireAuth/RequireOrg, OAuth callback deep-link, paywall upgrade CTA, authoring final-format visibility, billing controls). Postgres-only RLS tests are green when run against a real Postgres via the VS Code task (skipped on SQLite). CI runs API/Web/Docs jobs.
     - Discount lifecycle: API tests cover discount removal via webhook and `/api/usage` reflecting `discount=null`.
     - SPA: promo banner test stabilized with `data-testid="promo-banner"` and `afterEach(cleanup)`; BillingPage triggers a usage refresh after opening Checkout in dev/tests for faster feedback.
     - Accounts: added login throttle test asserting 429 after exceeding `login` scope.
@@ -138,7 +139,7 @@ Legend: [x] done, [ ] todo, [~] in progress
     - [~] Expand RLS role test coverage (initial Postgres-only tests in `db_policies/tests/test_rls_policies.py`)
 - [~] Core endpoints
     - [x] Users: GET /api/me
-    - [ ] Profile update
+    - [x] Profile update
     - [x] Organizations: CRUD, invite, transfer ownership, list members
     - [x] Org membership: add/remove/change roles (admin only)
     - [x] Proposals: CRUD with scoped queryset; quota enforced on create
@@ -245,7 +246,7 @@ Legend: [x] done, [ ] todo, [~] in progress
     - [x] Dashboard basics
         - [x] My proposals list + create
         - [x] Organizations list/management + invites; admin transfer
-        - [ ] Profile edit (email, name)
+    - [x] Profile edit (email, name)
     - [~] Authoring flow
     - [x] Show AI draft vs previous content; Approve/Revise; autosave JSONB (PATCH)
     - [x] Final formatting step added (deferred until all sections approved)
@@ -446,7 +447,7 @@ Notes
 
 ## Next up (short-term)
 - Stripe lifecycle: live-mode verification of coupons/promo codes; ensure usage reflects active discounts end-to-end in staging.
-- Invites: SPA polish for invite acceptance UX (backend hygiene done with expiry/rate-limit).
+- Invites: SPA polish for invite acceptance UX — done (global invite banner implemented with Accept/Dismiss).
 - RLS coverage: expand Postgres tests; document least-privileged DB user; consider migration hardening for policies.
 - SPA tests: export-after-formatting flow; end-to-end deep-link across OAuth + register; paywall E2E.
 - Operations: verify DB restore procedure; add uploads (media) backup guidance; minimal monitoring/healthcheck runbook; dependency scans re-run.

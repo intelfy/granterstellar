@@ -41,10 +41,16 @@ def stripe_webhook(request):
             event_type_hint = str(parsed.get('type') or '')
         except Exception:
             event_type_hint = ''
-    # In tests, Django forces DEBUG=False. Allow unsigned for specific, safe-to-simulate events.
-    relax_in_tests = bool(getattr(settings, 'TESTING', False) and event_type_hint in {
-        'customer.subscription.updated', 'customer.subscription.created', 'invoice.paid', 'invoice.payment_succeeded'
-    })
+    # Allow unsigned only in DEBUG test runs for specific, safe-to-simulate events.
+    # If a test explicitly sets DEBUG=False to emulate production, do NOT relax.
+    relax_in_tests = bool(
+        getattr(settings, 'TESTING', False)
+        and event_type_hint in {
+            'customer.subscription.updated', 'customer.subscription.created', 'invoice.paid', 'invoice.payment_succeeded'
+        }
+        and not secret
+        and not sig_header
+    )
     # In production (DEBUG=False): enforce configuration and signature if secret is set
     if not settings.DEBUG and not relax_in_tests:
         # Trace branch usage in tests to diagnose unexpected 400s

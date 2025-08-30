@@ -12,26 +12,18 @@ Scope and status
 
 - Front-end visual styling is intentionally deferred until the back-end is complete. This document exists to make the eventual styling pass efficient and precise by cataloging stable selectors and recommending low-risk class names to introduce.
 
-Global
 
-- Mount node: `#root`
-- Headline brand: text "Granterstellar" inside AppShell header (no class). Consider adding `.app-header` for styling if needed.
-
-Billing
 
 - Section root: ``<section>`` with ``<h2>Billing</h2>``
 - Usage summary line contains: "Tier:", "Status:", optional "Cancel at period end", "Period ends", "Seats".
 - Promo banner: ``span[data-testid="promo-banner"][aria-label="active-promo"]`` — displays "Promo: {formatted}" when a discount is active.
 - Inputs:
-  - Coupon text: label "Coupon/Promotion code (optional):" + adjacent input (no id/class)
   - Price ID: label "Price ID (optional):" + adjacent input
   - Seats: label "Seats (quantity):" + ``<input type="number">``
 - Buttons:
   - Upgrade (Checkout): button text "Upgrade (Checkout)"
   - Open Billing Portal: button text "Open Billing Portal"
-  - Cancel/Resume: button text "Cancel at period end" or "Resume"
-- Error banner: inline div with error text (no class)
-
+- Account: profile form inputs carry data-testids pf-username, pf-email, pf-first, pf-last and a pf-save button; a pf-ok element appears on successful save.
 Proposals
 
 - Section root: ``<section>`` with ``<h2>My Proposals</h2>``
@@ -126,6 +118,12 @@ Testing hooks
 
 - Promo banner: ``[data-testid="promo-banner"][aria-label="active-promo"]``
 - Auth/Org guards: ``[data-testid="login"]``, ``[data-testid="register"]``, ``[data-testid="ok"]`` (test components)
+
+Invite acceptance banner (new)
+
+- Container: ``[data-testid="invite-banner"]``
+- Accept button: ``[data-testid="invite-accept"]``
+- Dismiss button: ``[data-testid="invite-dismiss"]``
 
 Banners, errors, and dynamic content
 
