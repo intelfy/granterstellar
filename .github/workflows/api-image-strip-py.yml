@@ -1,0 +1,31 @@
+name: API image (STRIP_PY verification)
+
+on:
+  pull_request:
+    paths:
+      - 'api/**'
+      - '.github/workflows/api-image-strip-py.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'api/**'
+      - '.github/workflows/api-image-strip-py.yml'
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image with STRIP_PY=1
+        run: |
+          docker build --build-arg STRIP_PY=1 -t gs-api-strip -f api/Dockerfile .
+      - name: Inspect final layer for .py files
+        run: |
+          id=$(docker create gs-api-strip)
+          docker cp "$id":/app /tmp/app
+          docker rm "$id"
+          if find /tmp/app -type f -name '*.py' | grep -q .; then
+            echo "Error: Python source files found in final image when STRIP_PY=1" >&2
+            find /tmp/app -type f -name '*.py' >&2
+            exit 1
+          fi

@@ -1,4 +1,5 @@
 from typing import Optional
+import json
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -29,10 +30,32 @@ try:
 except Exception:  # pragma: no cover
     stripe = None
 
+# Optional Redis client for lightweight caching of /api/usage in production
+try:  # pragma: no cover - exercised indirectly; disabled in DEBUG/TESTING
+    import redis  # type: ignore
+except Exception:  # pragma: no cover
+    redis = None  # type: ignore
+
 
 @api_view(["GET"])
 @permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
 def usage(request):
+    # Production-only, short-lived cache to reduce load on hot path
+    cache_client = None
+    cache_key = None
+    if not settings.DEBUG and not getattr(settings, 'TESTING', False) and redis and getattr(settings, 'REDIS_URL', ''):
+        try:  # pragma: no cover (network I/O)
+            cache_client = redis.Redis.from_url(settings.REDIS_URL)  # type: ignore[attr-defined]
+            user_id = getattr(request.user, 'id', 'anon') or 'anon'
+            org_id_header = request.headers.get('X-Org-ID') or ''
+            cache_key = f"usage:{user_id}:{org_id_header or 'none'}"
+            cached = cache_client.get(cache_key)  # bytes | None
+            if isinstance(cached, (bytes, bytearray, memoryview)):
+                data = json.loads(bytes(cached).decode('utf-8'))
+                return Response(data)
+        except Exception:
+            cache_client = None
+            cache_key = None
     # If unauthenticated (in DEBUG we allow), return safe defaults rather than erroring
     if not getattr(request.user, "is_authenticated", False):
         free_limits = get_limits_for_tier("free")
@@ -126,6 +149,12 @@ def usage(request):
             }
         }
         resp["enterprise_effective_caps"] = {str(k): v for k, v in compute_enterprise_effective_cap(request.user).items()}
+    # Store in cache briefly (TTL ~ 20s) to avoid staleness while still smoothing bursts
+    if cache_client and cache_key:
+        try:  # pragma: no cover (network I/O)
+            cache_client.setex(cache_key, 20, json.dumps(resp))
+        except Exception:
+            pass
     return Response(resp)
 
 

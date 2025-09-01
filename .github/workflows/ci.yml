@@ -62,10 +62,31 @@ jobs:
         run: npm run lint --silent
       - name: Test (vitest)
         run: npm run test --silent
+      - name: Build (vite)
+        run: npm run build --silent
+      - name: Enforce dist hygiene
+        run: |
+          set -e
+          # Ensure no source maps
+          if find dist -type f -name '*.map' | grep -q .; then echo "Unexpected source maps in dist"; exit 1; fi
+          if grep -R "sourceMappingURL" -n dist; then echo "sourceMappingURL comments found"; exit 1; fi
+          # Ensure console/debugger stripped
+          if grep -R "console\." -n dist; then echo "console calls found in dist"; exit 1; fi
+          if grep -R "debugger" -n dist; then echo "debugger statements found in dist"; exit 1; fi
+          # Print bundle sizes
+          ls -lah dist || true
 
   docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install linkcheck deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
       - name: Link check
-  run: python3 scripts/linkcheck.py
+        run: python3 scripts/linkcheck.py

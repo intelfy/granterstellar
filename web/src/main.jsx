@@ -127,14 +127,14 @@ function Umami() {
 }
 
 // Global invite banner: detects ?invite= token when authenticated and offers Accept/Dismiss
-function InviteBanner({ token }) {
+export function InviteBanner({ token }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [pending, setPending] = useState('')
   useEffect(() => {
     try {
-      const url = new URL(window.location.href)
-      const inv = url.searchParams.get('invite') || ''
+      const qs = new URLSearchParams(location.search || '')
+      const inv = qs.get('invite') || ''
       setPending(token ? inv : '')
     } catch {
       setPending('')
@@ -142,9 +142,12 @@ function InviteBanner({ token }) {
   }, [location.search, token])
   const clearParam = () => {
     try {
-      const url = new URL(window.location.href)
-      url.searchParams.delete('invite')
-      window.history.replaceState({}, '', url.toString())
+      const qs = new URLSearchParams(location.search || '')
+      qs.delete('invite')
+  // Use router-native replace navigation to avoid jsdom SecurityError and honor basename
+  const search = qs.toString()
+  const newPath = `${location.pathname}${search ? `?${search}` : ''}${location.hash || ''}`
+  navigate(newPath, { replace: true })
     } catch {}
   }
   if (!token || !pending) return null
@@ -580,7 +583,7 @@ function LoginPage({ token, setToken }) {
         <button type="button" onClick={() => navigate('/register')}>Create an account</button>
       )}
       {token && pendingInvite && (
-        <button type="button" onClick={async () => { try { await api('/orgs/invites/accept', { method: 'POST', token, body: { token: pendingInvite } }); alert('Invite accepted'); const url = new URL(window.location.href); url.searchParams.delete('invite'); window.history.replaceState({}, '', url.toString()); setPendingInvite('') } catch (e) { alert('Invite accept failed: ' + (e?.data?.error || e.message)) } }}>Accept pending invite</button>
+  <button type="button" onClick={async () => { try { await api('/orgs/invites/accept', { method: 'POST', token, body: { token: pendingInvite } }); alert('Invite accepted'); try { const url = new URL(window.location.href); url.searchParams.delete('invite'); const path = `${url.pathname}${url.search}${url.hash}`; navigate(path, { replace: true }) } catch {} setPendingInvite('') } catch (e) { alert('Invite accept failed: ' + (e?.data?.error || e.message)) } }}>Accept pending invite</button>
       )}
     </div>
   )
@@ -857,6 +860,7 @@ export function Proposals({ token, selectedOrgId }) {
   const [creating, setCreating] = useState(false)
   const [exporting, setExporting] = useState(null)
   const [usage, setUsage] = useState(null)
+  const [usageLoaded, setUsageLoaded] = useState(false)
   const [fmtById, setFmtById] = useState({})
   const [orgId, setOrgId] = useState(() => localStorage.getItem('orgId') || '')
   const [openAuthorForId, setOpenAuthorForId] = useState(null)
@@ -887,7 +891,14 @@ export function Proposals({ token, selectedOrgId }) {
     }
   }
   const refreshUsage = async () => {
-    try { setUsage(await api('/usage', { token, orgId: orgId || undefined })) } catch {}
+    try {
+      const u = await api('/usage', { token, orgId: orgId || undefined })
+      setUsage(u)
+    } catch {
+      // keep previous usage if fetch fails
+    } finally {
+      setUsageLoaded(true)
+    }
   }
   const refresh = async () => {
     setLoading(true)
@@ -926,6 +937,12 @@ export function Proposals({ token, selectedOrgId }) {
   const createOne = async () => {
     setCreating(true)
     try {
+      // Guard: if usage indicates blocked, surface paywall immediately and skip API
+      if (usage && usage.can_create_proposal === false) {
+        const reason = usage.reason || 'quota'
+        alert(`Paywall: ${reasonLabel(reason)}. Click Upgrade to continue.`)
+        return
+      }
       await api('/proposals/', { method: 'POST', token, orgId: orgId || undefined, body: { content: { meta: { title: 'Untitled' }, sections: {} }, schema_version: 'v1' } })
       await refresh()
       await refreshUsage()
@@ -973,6 +990,8 @@ export function Proposals({ token, selectedOrgId }) {
         } catch {
           openDebugLocal(url)
         }
+  // Best-effort: refresh usage so UI reflects plan changes immediately in tests/dev
+  await refreshUsage()
       }
     } catch (e) {
       alert('Checkout unavailable')
@@ -1029,7 +1048,7 @@ export function Proposals({ token, selectedOrgId }) {
         )}
         <div>
           <input placeholder="Org ID (optional)" value={orgId} onChange={(e) => setOrgId(e.target.value)} />
-          <button disabled={creating || (usage && usage.can_create_proposal === false)} onClick={createOne}>New</button>
+          <button disabled={creating || !usageLoaded || (usage && usage.can_create_proposal === false)} onClick={createOne}>New</button>
           {usage && usage.can_create_proposal === false && (<button onClick={onUpgrade}>Upgrade</button>)}
           <button onClick={onPortal}>Billing Portal</button>
           {usage?.subscription?.cancel_at_period_end ? (
@@ -1271,7 +1290,7 @@ export function RequireOrg({ token, children }) {
 }
 
 // Registration page: name, org (or invite), plan selection
-function RegisterPage({ token }) {
+export function RegisterPage({ token }) {
   const [name, setName] = useState('')
   const [orgName, setOrgName] = useState('')
   const [invite, setInvite] = useState('')

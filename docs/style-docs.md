@@ -11,9 +11,6 @@ Notes
 Scope and status
 
 - Front-end visual styling is intentionally deferred until the back-end is complete. This document exists to make the eventual styling pass efficient and precise by cataloging stable selectors and recommending low-risk class names to introduce.
-
-
-
 - Section root: ``<section>`` with ``<h2>Billing</h2>``
 - Usage summary line contains: "Tier:", "Status:", optional "Cancel at period end", "Period ends", "Seats".
 - Promo banner: ``span[data-testid="promo-banner"][aria-label="active-promo"]`` — displays "Promo: {formatted}" when a discount is active.

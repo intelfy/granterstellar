@@ -2,8 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import React from 'react'
 import { MemoryRouter } from 'react-router-dom'
-import { RequireAuth } from '../main.jsx'
-import { default as Main } from '../main.jsx'
+import { InviteBanner } from '../main.jsx'
 
 // We import Root indirectly by rendering a minimal tree that includes InviteBanner via Root export side effects
 // But since Root is default-rendered to #root in main.jsx, we instead render a small shell using components
@@ -18,10 +17,7 @@ function Shell({ token }) {
 
 describe('InviteBanner', () => {
   it('shows when invite param present and accepts invite', async () => {
-    // Prepare URL with invite param
-    const url = new URL('http://localhost/app?invite=tok_abc')
-    window.history.replaceState({}, '', url.toString())
-
+    // Render at a route with invite param; MemoryRouter will set location appropriately
     // Mock fetch for invite accept and a couple of usage/orgs calls that may happen
     global.fetch = vi.fn((u, opts) => {
       const path = u.toString()
@@ -34,26 +30,17 @@ describe('InviteBanner', () => {
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
 
-    // Render a small app tree where RequireAuth would allow children and InviteBanner logic depends on token
     render(
-      <MemoryRouter initialEntries={[ '/app' ]}>
-        <RequireAuth token="t">
-          <Shell token="t" />
-        </RequireAuth>
+      <MemoryRouter initialEntries={[ '/app?invite=tok_abc' ]}>
+        <InviteBanner token="t" />
       </MemoryRouter>
     )
 
-    // Because InviteBanner is mounted in Root in the real app, we simulate its DOM presence by checking URL mutation after click
-    // Instead, we import the actual module which mounts InviteBanner; ensure the banner appears by querying test id
-    // In this test environment, main.jsx renders nothing globally, so we rely on the component including InviteBanner within Root
-
-    // Since InviteBanner is part of Root, we cannot access it directly here; however, its logic depends on URL and token
-    // To validate behavior, call the accept endpoint and ensure URL param clears
-    // Click through by dispatching a custom event if the element exists
-    const accept = await screen.queryByTestId('invite-accept')
-    if (accept) {
-      fireEvent.click(accept)
-    }
+    // Ensure banner shows
+    const banner = await screen.findByTestId('invite-banner')
+    expect(banner).toBeTruthy()
+    const accept = screen.getByTestId('invite-accept')
+    fireEvent.click(accept)
 
     await waitFor(() => {
       const current = new URL(window.location.href)
@@ -62,28 +49,24 @@ describe('InviteBanner', () => {
   })
 
   it('dismiss hides banner without calling API', async () => {
-    const url = new URL('http://localhost/app?invite=tok_dismiss')
-    window.history.replaceState({}, '', url.toString())
-
-    const fetchSpy = vi.fn()
-    global.fetch = fetchSpy
+    global.fetch = vi.fn()
 
     render(
-      <MemoryRouter initialEntries={[ '/app' ]}>
-        <RequireAuth token="t">
-          <Shell token="t" />
-        </RequireAuth>
+      <MemoryRouter initialEntries={[ '/app?invite=tok_dismiss' ]}>
+        <InviteBanner token="t" />
       </MemoryRouter>
     )
 
-    const dismiss = screen.queryByTestId('invite-dismiss')
-    if (dismiss) fireEvent.click(dismiss)
+    const banner = await screen.findByTestId('invite-banner')
+    expect(banner).toBeTruthy()
+    const dismiss = screen.getByTestId('invite-dismiss')
+    fireEvent.click(dismiss)
 
     await waitFor(() => {
       const current = new URL(window.location.href)
       expect(current.searchParams.get('invite')).toBe(null)
     })
-    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 })
 

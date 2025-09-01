@@ -3,10 +3,12 @@
 This README helps you spin up the Django API locally, seed a demo user, and run quick smoke tests without starting a server.
 
 ## Prerequisites
+
 - Python 3.11+ (tested with 3.13)
 - macOS/Linux shell (zsh/bash)
 
 ## Setup
+
 ```sh
 # From repo root
 cd api
@@ -22,11 +24,13 @@ python manage.py migrate
 ```
 
 Optional: use Postgres by setting `DATABASE_URL` before `migrate`, e.g.
+
 ```sh
 export DATABASE_URL=postgresql://user:pass@localhost:5432/granterstellar
 ```
 
 ## Seed a demo user + proposal (optional)
+
 ```sh
 python - <<'PY'
 import os
@@ -48,7 +52,9 @@ PY
 ```
 
 ## Quick smoke tests (no server required)
+
 Run a short script using Django's test client to hit key endpoints.
+
 ```sh
 python - <<'PY'
 import os
@@ -86,6 +92,7 @@ PY
 ```
 
 ## Run the dev server (optional)
+
 ```sh
 python manage.py runserver 127.0.0.1:8000
 # Then: curl -sS http://127.0.0.1:8000/healthz
@@ -94,7 +101,9 @@ python manage.py runserver 127.0.0.1:8000
 Note: In DEBUG, `testserver` is allowed automatically for Django's test client.
 
 ## Tests
+
 Run Django tests per app to avoid discovery collisions:
+
 ```sh
 # From api/
 python manage.py test -v 2 accounts.tests.test_health \
@@ -105,6 +114,7 @@ python manage.py test -v 2 accounts.tests.test_health \
 ```
 
 ## Key endpoints (implemented)
+
 - GET /healthz
 - Auth: POST /api/token, POST /api/token/refresh (JWT)
 - OAuth (scaffold): GET /api/oauth/google/start, GET /api/oauth/google/callback
@@ -116,16 +126,20 @@ python manage.py test -v 2 accounts.tests.test_health \
           POST /api/stripe/webhook (Stripe events; requires signature in prod)
 
 Maintenance
+
 - Period enforcement safety-net (runs if webhooks are missed):
   - python manage.py enforce_subscription_periods
-# AI endpoints:
-  - POST /api/ai/plan
-  - POST /api/ai/write
-  - POST /api/ai/revise
-  - POST /api/ai/format (final formatting pass after all sections are approved)
-  - GET /api/ai/jobs/{id} → {status,result,error}
+
+## AI endpoints
+
+- POST /api/ai/plan
+- POST /api/ai/write
+- POST /api/ai/revise
+- POST /api/ai/format (final formatting pass after all sections are approved)
+- GET /api/ai/jobs/{id} → {status,result,error}
 
 Async (optional):
+
 - Set AI_ASYNC=1 and configure REDIS_URL for Celery broker/back-end.
 - When enabled, the above POST endpoints return {job_id,status} and you can poll GET /api/ai/jobs/{id} for completion.
 - Proposals: /api/proposals (scoped; create enforces quota)
@@ -134,14 +148,15 @@ Async (optional):
   - Text extraction: txt/docx parsed; PDFs extracted via pdfminer; optional OCR for images (OCR_IMAGE=1) and PDFs (OCR_PDF=1 with `ocrmypdf` binary installed)
 
 ## Troubleshooting
+
 - DisallowedHost testserver: allowed automatically in DEBUG in settings.
 - 402 on POST /api/proposals: quota exceeded (free tier). Check /api/usage and X-Quota-Reason header.
 - Export file not found: ensure DEBUG=1 (serves media) or proper MEDIA settings in production.
 - Stripe webhook: in DEBUG without STRIPE_WEBHOOK_SECRET, unsigned events are accepted for local testing; in production, signature is required. When using Stripe CLI locally, forward to `/api/stripe/webhook` and set the printed signing secret into STRIPE_WEBHOOK_SECRET for best parity.
 - Checkout response: use `url` to redirect users; `session_id` is provided for client-side Stripe integrations if you need to confirm status later.
 
-
 ## Settings of note
+
 - FAILED_PAYMENT_GRACE_DAYS: when > 0, a subscription in past_due remains treated as active within the grace window for quota checks.
 - FILE_UPLOAD_MAX_BYTES: hard cap enforced by the upload API (413 on overflow). If unset, falls back to FILE_UPLOAD_MAX_MEMORY_SIZE.
-- TEXT_EXTRACTION_MAX_BYTES: upper bound for txt/docx/pdf parsing; protects CPU/memory.
+- TEXT_EXTRACTION_MAX_BYTES: upper bound for txt/docx/pdf parsing; protects CPU/memory

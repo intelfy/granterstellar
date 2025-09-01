@@ -5,6 +5,9 @@ from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenRefreshView
 from pathlib import Path
 from django.conf import settings
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
 from accounts.views import MeView, DebugTokenObtainPairView, ThrottledTokenObtainPairView
 from billing.views import usage, customer_portal, checkout, cancel_subscription, resume_subscription
 from billing.webhooks import stripe_webhook
@@ -21,12 +24,19 @@ def healthz(_request):
     return HttpResponse('ok')
 
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def api_healthz(_request):
+    return Response({"status": "ok"})
+
+
 router = DefaultRouter()
 router.register(r'proposals', ProposalViewSet, basename='proposal')
 router.register(r'orgs', OrganizationViewSet, basename='org')
 
 urlpatterns = [
     path('healthz', healthz),
+    path('api/healthz', api_healthz),
     path('api/me', MeView.as_view()),
     # In DEBUG, route password logins through a view that marks the user as Pro tier for testing
     path('api/token', DebugTokenObtainPairView.as_view() if settings.DEBUG else ThrottledTokenObtainPairView.as_view()),
