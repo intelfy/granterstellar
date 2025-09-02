@@ -1,4 +1,4 @@
-# Granterstellar — Engineering Plan (updated 2025-08-30)
+# Granterstellar — Engineering Plan (updated 2025-09-01)
 
 Source of truth for product/architecture: `.github/copilot-instructions.md` and `docs/README.md` (install/security/ops details in `docs/*`). This file tracks current priorities and gaps only.
 
@@ -7,7 +7,7 @@ Legend: [ ] todo, [~] in progress, [x] done
 ## Status snapshot
 
 - API stable: accounts/orgs/proposals/files/exports/billing/ai; JWT + Google/GitHub/Facebook OAuth; quotas + seats/extras; exports md→pdf/docx; AI plan/write/revise/format (sync or async); uploads hardened (size/MIME/magic/scan); DEBUG flows for local dev.
-- SPA stable: auth/RequireOrg, proposals list/create, orgs + invites, uploads, AI flows incl. final-format, exports, paywall/upgrade, base path `/app`, minimal styling. Unit tests pass; jsdom guards in place.
+- SPA stable: auth/RequireOrg, proposals list/create, orgs + invites, uploads, AI flows incl. final-format, exports, paywall/upgrade, base path `/app`, minimal styling. Route-level code splitting in place for major pages. Editor includes AuthorPanel (metadata + internal notes) and SectionDiff (inline diff). Unit tests pass; jsdom guards in place.
 - Security: strict CSP, Host/cookie/rate limits, OAuth state/JWKS, SSRF guards, safe external nav, webhook signature in non-DEBUG. Backups scripted; orphan scan present.
 - Tests: API/Web suites green locally; RLS suite green against Postgres via task. CI covers API/Web/Docs. Linting passes (ruff, eslint-js).
 
@@ -23,7 +23,7 @@ Legend: [ ] todo, [~] in progress, [x] done
 
 ### 3. Ops and monitoring
 
-- [ ] Minimal health/monitor endpoints and log structure review; quick runbook for restore check of DB + media.
+- [x] Minimal health/monitor endpoint `/api/healthz` added; review logs and runbook still pending.
 - [ ] Re-run dependency/SAST scans and capture deltas (document compensating controls; add minimal suppressions if justified).
 
 ## 4. AI providers
@@ -40,10 +40,11 @@ Legend: [ ] todo, [~] in progress, [x] done
 - Web build (Vite)
   - [~] Ensure production build has: sourcemap=false, minify on, CSS minify, hashed filenames, asset inlining threshold sensible
   - [x] Drop console/debugger in prod build (keep aligned with CI invariants); verify via CI grep against `web/dist`
-  - [ ] Route-level code splitting: React.lazy for heavy views (editor, exports, billing) and defer non-critical modules
-  - [ ] Vendor chunking and stable manualChunks to maximize browser cache reuse
+  - [x] Route-level code splitting: React.lazy for heavy views (dashboard/proposals/orgs, account, billing) implemented; further tuning pending
+  - [x] Vendor chunking and stable manualChunks to maximize browser cache reuse
   - [ ] Preload critical above-the-fold chunks; lazy-load secondary panels (OCR, metrics)
   - [ ] Analyze bundle (rollup-plugin-visualizer) and cap main bundle size; document deltas
+  - Baseline (2025-09-01 local): total gzipped JS ≈ 59.8 KB; largest chunk vendor-react ≈ 43.7 KB gzip. Analyzer report at web/dist/stats.html. CI guard wired via scripts/sizeguard.mjs with budget 600 KB (soft; tighten later to ~180–250 KB as features stabilize).
 
 - Runtime (client)
   - [ ] Coalesce and debounce autosaves/searches; cap concurrency for background fetches; exponential backoff on retry
@@ -54,7 +55,7 @@ Legend: [ ] todo, [~] in progress, [x] done
 - API efficiency
   - [ ] Ensure list endpoints are paginated and indexed (confirm `select_related/prefetch_related` on proposals/orgs)
   - [ ] Add/verify gzip/br compression and ETag/Last-Modified for cacheable GETs
-  - [ ] Cache lightweight, per-user/org GETs (e.g., `/api/usage`) briefly in Redis with RLS-aware keys (user+org)
+  - [x] Cache lightweight, per-user/org GETs (e.g., `/api/usage`) briefly in Redis with RLS-aware keys (user+org)
   - [ ] Batch endpoints where reasonable (e.g., combined bootstrap: account, orgs, usage)
 
 - Infra/delivery
@@ -70,7 +71,7 @@ Legend: [ ] todo, [~] in progress, [x] done
 
 - SPA artifacts
   - [x] No source maps in prod (`build.sourcemap=false`), remove inline `sourceMappingURL` comments
-  - [ ] Strip comments from JS/CSS; configure Terser `format.comments=false` while preserving third‑party license banners (e.g., `/@license|@preserve|^!/`)
+  - [x] Strip comments from JS/CSS; configure Terser `format.comments` to preserve third‑party license banners (e.g., `/@license|@preserve|^!/`)
   - [x] Drop `console`/`debugger` and dev-only branches in prod builds; verify via CI grep
   - [ ] Exclude docs/tests/maps and any non-runtime assets from `web/dist`
 
@@ -81,7 +82,7 @@ Legend: [ ] todo, [~] in progress, [x] done
 
 - Verification in CI
   - [x] Step: build SPA and assert no `*.map`, no `sourceMappingURL`, no `console|debugger` strings
-  - [ ] Step: build API image with `STRIP_PY=1` and assert no `*.py` present in final layer
+  - [x] Step: build API image with `STRIP_PY=1` and assert no `*.py` present in final layer
   - [ ] License check: ensure license banners of third‑party code are retained where required
 
 - Operator docs remain in private repo
@@ -122,6 +123,9 @@ Legend: [ ] todo, [~] in progress, [x] done
 ### 9. SPA tests (targeted)
 
 - [x] E2E: deep-link across OAuth + register path.
+- [x] Organizations standalone route renders and manage view (members/invites) wired.
+- [x] AuthorPanel notes and SectionDiff rendering covered.
+- [x] Authoring OCR upload previews and sends file_refs on write.
 
 ## Acceptance tests — Billing (Stripe)
 

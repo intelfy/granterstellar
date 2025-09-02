@@ -3,42 +3,53 @@
 This guide tells you exactly what to click and what to paste to deploy Granterstellar using Coolify (with Traefik). No Linux or Docker knowledge required.
 
 What you’ll get
+
 - One app that serves everything on port 8000: API, SPA under /app, static landing at /.
 - Optional: a separate “Landing” app for a waitlist form (port 5173). You can skip this.
 - Managed Postgres (required) and Redis (optional unless you want async jobs).
+- SPA performance: route-level code splitting, idle-time preloads for likely next pages, and optional Web Vitals logging.
 
 Before you begin
+
 - You have a Coolify instance reachable at a domain, with Traefik enabled.
 - You pointed your DNS (A/AAAA) for your chosen app domain to Coolify.
 - You can connect this GitHub repo to Coolify.
 
 Recommended domains
-- Test: https://grants.intelfy.dk
-- Production: https://forgranted.io
+
+- Test: <https://grants.intelfy.dk>
+- Production: <https://forgranted.io>
 
 Routes (defaults)
+
 - / → landing page (static files bundled in the API image)
 - /app → the React SPA
 - /static/app → SPA assets (JS/CSS)
 - /api/* → Django API
+- /healthz and /api/healthz → health endpoints (plain text and JSON)
 
 Key concepts (keep these defaults)
+
 - Asset base: VITE_BASE_URL = /static/app/
 - Router base: VITE_ROUTER_BASE = /app
 - App hosts: APP_HOSTS = comma‑separated hostnames that should redirect / → /app
+- Invite acceptance: SPA surfaces a global invite banner when an invite token is in the URL (selectors in docs/style-docs.md).
 
 Step 1 — Create PostgreSQL in Coolify
+
 1) New Resource → Application → pick a PostgreSQL 16 template.
 2) Name it “granterstellar-postgres”.
 3) Set database name, username, password. Click Deploy.
 4) Copy the internal connection URL it shows. You will paste it as DATABASE_URL later.
 
 Step 2 — Create Redis in Coolify (optional but recommended)
+
 1) New Resource → Application → pick Redis 7.
 2) Name it “granterstellar-redis”.
 3) Deploy and copy the internal Redis URL (e.g., redis://redis:6379/0). You will paste it as REDIS_URL later.
 
 Step 3 — Deploy the App (API + SPA)
+
 1) New Resource → Application → “Dockerfile”.
 2) Repo: this repo; Branch: main; Context: repo root; Dockerfile path: api/Dockerfile.
 3) Domain: your app domain (e.g., app.example.com). Traefik will handle HTTPS.
@@ -47,6 +58,7 @@ Step 3 — Deploy the App (API + SPA)
 6) Environment → paste the template below and fill values (keep syntax exactly):
 
 Paste this into Coolify → Environment
+
 ```env
 # Required
 SECRET_KEY=change-me-to-a-long-random-string
@@ -72,6 +84,7 @@ VITE_ROUTER_BASE=/app
 VITE_UMAMI_WEBSITE_ID=
 VITE_UMAMI_SRC=
 VITE_UI_EXPERIMENTS=0
+VITE_WEB_VITALS=0
 
 # Security headers (comma-separated, no quotes; 'self' is auto-added)
 CSP_SCRIPT_SRC=
@@ -169,41 +182,46 @@ GEMINI_API_KEY=
 ```
  
 Uploads cap enforcement
+
 - The upload API enforces FILE_UPLOAD_MAX_BYTES as the hard cap. If unset, it falls back to FILE_UPLOAD_MAX_MEMORY_SIZE.
 - TEXT_EXTRACTION_MAX_BYTES bounds parsing work for txt/docx/pdf.
+
 Environment variables reference (what they do and why)
 
 Host, routing, and origins
+
 - ALLOWED_HOSTS: Server‑side safety. Comma‑separated hostnames the Django app will serve (protects against Host‑header spoofing). Must include your app domain.
 - PUBLIC_BASE_URL: The external https URL of your app. Used for absolute links in emails and redirects.
 - APP_HOSTS: Controls what happens when a user visits the root path “/”.
-   - Purpose: On the hosts listed here, “/” will 301‑redirect to “/app” (the SPA). On other hosts, “/” serves the static landing page.
-   - When to set: Add the hostnames where the SPA should be the home page.
-   - When to leave out: Exclude your marketing/landing host if you want it to show the landing page at “/”.
-   - Format: Comma‑separated hostnames (no scheme, no slashes). Examples:
-      - Single app host: APP_HOSTS=app.example.com
-      - Root domain SPA: APP_HOSTS=forgranted.io
-      - Test/prod: APP_HOSTS=grants.intelfy.dk,forgranted.io
-- CORS_ALLOWED_ORIGINS / CSRF_TRUSTED_ORIGINS: Browser cross‑origin rules. List full origins (scheme + host, e.g., https://app.example.com) that can call the API/send cookies.
+      - Purpose: On the hosts listed here, “/” will 301‑redirect to “/app” (the SPA). On other hosts, “/” serves the static landing page.
+      - When to set: Add the hostnames where the SPA should be the home page.
+      - When to leave out: Exclude your marketing/landing host if you want it to show the landing page at “/”.
+      - Format: Comma‑separated hostnames (no scheme, no slashes). Examples:
+         - Single app host: `APP_HOSTS=app.example.com`
+         - Root domain SPA: `APP_HOSTS=forgranted.io`
+         - Test/prod: `APP_HOSTS=grants.intelfy.dk,forgranted.io`
+      - CORS_ALLOWED_ORIGINS / CSRF_TRUSTED_ORIGINS: Browser cross‑origin rules. List full origins (scheme + host, e.g., <https://app.example.com>) that can call the API/send cookies.
 - VITE_BASE_URL / VITE_ROUTER_BASE: How the SPA is served and routed. Keep defaults unless you have a custom CDN.
 
  
 Content Security Policy (CSP) allow‑lists
+
 - Defaults: The app ships a strict CSP that only allows same‑origin resources. These envs extend, not replace, the defaults.
 - Syntax: Comma‑separated URLs/hosts, no quotes. Do not include 'self' (it’s auto‑added).
 - CSP_SCRIPT_SRC: Extra hosts you load scripts from (e.g., your analytics script host).
-   - Example (Umami): CSP_SCRIPT_SRC=https://analytics.example.com
+   - Example (Umami): `CSP_SCRIPT_SRC=https://analytics.example.com`
 - CSP_STYLE_SRC: Extra style sources (e.g., a CSS CDN). Avoid 'unsafe-inline'.
-   - Example: CSP_STYLE_SRC=https://cdn.example.com
+   - Example: `CSP_STYLE_SRC=https://cdn.example.com`
 - CSP_CONNECT_SRC: Where the browser is allowed to make XHR/fetch/WebSocket requests to.
    - Why it matters: Without listing a host here, the browser will block fetch() to that host even if the network is reachable.
    - You typically add your analytics collector or other third‑party APIs used directly from the browser.
    - Examples:
-      - Umami collector: CSP_CONNECT_SRC=https://analytics.example.com
-      - Multiple endpoints: CSP_CONNECT_SRC=https://analytics.example.com,https://api.other.com
+      - Umami collector: `CSP_CONNECT_SRC=https://analytics.example.com`
+      - Multiple endpoints: `CSP_CONNECT_SRC=https://analytics.example.com,https://api.other.com`
    - Not needed for: Google OAuth redirects (top‑level navigation), server‑to‑server calls in Django.
 
 Inline styles escape hatch
+
 - CSP_ALLOW_INLINE_STYLES: Set to 1 to temporarily allow inline CSS by adding 'unsafe-inline' to style-src. Default is 0 (disabled), which is recommended for security.
    - Example: CSP_ALLOW_INLINE_STYLES=1 (use only as a short-term workaround while migrating styles to external CSS).
 
@@ -217,11 +235,13 @@ Inline styles escape hatch
    - Optional (dev only): python manage.py seed_demo
 
 Smoke test
+
 - Visit <https://app.example.com/healthz> → ok
 - Visit <https://app.example.com/app> → SPA loads
 - Visit <https://app.example.com/api/usage> → JSON
 
 Step 4 — Optional: Deploy a Celery worker (for async exports/AI)
+
 1) New Resource → Application → “Dockerfile” (same repo, api/Dockerfile).
 2) No domain. No internal port.
 3) Copy the API app’s environment; set EXPORTS_ASYNC=1 and fill CELERY_* and REDIS URLs.
@@ -229,7 +249,9 @@ Step 4 — Optional: Deploy a Celery worker (for async exports/AI)
 5) Deploy.
 
 Step 5 — Optional: Landing (waitlist) app
+
 If you want a separate waitlist page with double opt‑in via Mailgun:
+
 1) New Resource → Application → “Dockerfile”; Context: repo root; Dockerfile: Dockerfile; Port: 5173; Healthcheck: /healthz.
 2) Environment:
    - PUBLIC_BASE_URL=https://your-landing-domain
@@ -238,20 +260,24 @@ If you want a separate waitlist page with double opt‑in via Mailgun:
    - MAILGUN_API_HOST=api.mailgun.net (or api.eu.mailgun.net)
    - MAILGUN_LIST=waitlist@mg.yourdomain.com
    - NODE_ENV=production
+   - ALLOW_HTTP_IN_PROD=1 (only when HTTPS is terminated by a reverse proxy like Traefik)
 3) DNS for the landing domain should point to Coolify/Traefik.
 
 Landing server HTTPS and throttling (when running standalone)
+
 - The small Node landing server (`server.mjs`) can serve the static landing and waitlist endpoint by itself. In production it typically sits behind Traefik/Coolify with TLS termination.
 
 - If you run it directly, you can enable HTTPS and tune resource guards via environment variables:
    - ENABLE_HTTPS=1: Start HTTPS when key/cert paths are provided.
    - HTTPS_KEY_PATH, HTTPS_CERT_PATH: File paths to your TLS key and certificate.
+   - ALLOW_HTTP_IN_PROD=1: Allow HTTP mode even with NODE_ENV=production (use only behind a TLS proxy).
    - STATIC_FS_CONCURRENCY: Max concurrent static file streams (default 50).
          - STATIC_RATE_LIMIT_MAX: Per‑IP GET/HEAD rate limit window cap (default 300 per 5 minutes).
 
 - When running behind Traefik, keep HTTP mode; TLS is terminated at the proxy. Security headers and CSP are still set by the server.
 
 - Umami analytics injection is validated: src must be https and end with `/script.js`, and website id is attribute‑escaped.
+   - The SPA also supports Umami via VITE_UMAMI_* with CSP allow‑lists; the landing server enforces strict validation and CSP.
 
 Providers setup (copy‑paste friendly)
 
@@ -364,7 +390,7 @@ Notes
 
 For production, use a dedicated Postgres role without BYPASSRLS and with only CRUD on application tables. See `docs/rls_postgres.md` for SQL and guidance.
 
-Last updated: 2025-08-29
+Last updated: 2025-09-01
 
 ## Staging verification checklist — Stripe promos/coupons
 

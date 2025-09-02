@@ -25,6 +25,7 @@ class BaseProvider:
         full_text: str,
         template_hint: str | None = None,
         file_refs: Optional[List[Dict[str, Any]]] = None,
+        deterministic: bool = False,
     ) -> AIResult:
         """Final formatting pass across the complete proposal text.
         Implementations should prioritize structure suitable for PDF export.
@@ -55,8 +56,11 @@ class LocalStubProvider(BaseProvider):
         full_text: str,
         template_hint: str | None = None,
         file_refs: Optional[List[Dict[str, Any]]] = None,
+        deterministic: bool = False,
     ) -> AIResult:
         header = "[stub:formatted]" + (f" template={template_hint}" if template_hint else "")
+        if deterministic:
+            header += " deterministic=1"
         return AIResult(text=f"{header}\n\n{full_text}")
 
 
@@ -131,6 +135,7 @@ class Gpt5Provider(BaseProvider):
         full_text: str,
         template_hint: str | None = None,
         file_refs: Optional[List[Dict[str, Any]]] = None,
+        deterministic: bool = False,
     ) -> AIResult:
         # Not the formatter in our flow; return identity
         return AIResult(text=full_text, usage_tokens=0, model_id="gpt-5")
@@ -166,10 +171,12 @@ class GeminiProvider(BaseProvider):
         full_text: str,
         template_hint: str | None = None,
         file_refs: Optional[List[Dict[str, Any]]] = None,
+        deterministic: bool = False,
     ) -> AIResult:
         # Final structuring for export; simulate by annotating
         hint = f" template={template_hint}" if template_hint else ""
-        return AIResult(text=f"[gemini:final_format{hint}]\n\n{full_text}", usage_tokens=0, model_id="gemini")
+        det = " deterministic=1" if deterministic else ""
+        return AIResult(text=f"[gemini:final_format{hint}{det}]\n\n{full_text}", usage_tokens=0, model_id="gemini")
 
 
 class CompositeProvider(BaseProvider):
@@ -195,11 +202,13 @@ class CompositeProvider(BaseProvider):
         full_text: str,
         template_hint: str | None = None,
         file_refs: Optional[List[Dict[str, Any]]] = None,
+        deterministic: bool = False,
     ) -> AIResult:
         return self.gemini.format_final(
             full_text=full_text,
             template_hint=template_hint,
             file_refs=file_refs,
+            deterministic=deterministic,
         )
 
 

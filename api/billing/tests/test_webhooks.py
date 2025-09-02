@@ -126,3 +126,35 @@ class StripeWebhookTests(TestCase):
 		self.assertIsNotNone(ec)
 		ec = cast(ExtraCredits, ec)
 		self.assertEqual(ec.proposals, 20)
+
+	@override_settings(DEBUG=True, STRIPE_WEBHOOK_SECRET="")
+	def test_subscription_updated_with_discount_null_clears_local(self):
+		User = get_user_model()
+		user = User.objects.create_user(username="discnull", password="p", email="d@example.com")
+		# Seed a subscription with a discount present
+		sub = Subscription.objects.create(
+			owner_user=user,
+			tier="pro",
+			status="active",
+			stripe_subscription_id="sub_x",
+			stripe_customer_id="",
+			discount={"id": "promo_x", "source": "promotion_code"},
+		)
+		# Event carrying explicit discount: null should clear stored discount
+		event = {
+			"type": "customer.subscription.updated",
+			"data": {
+				"object": {
+					"object": "subscription",
+					"id": "sub_x",
+					"customer": "cus_x",
+					"status": "active",
+					"metadata": {"user_id": str(user.pk), "tier": "pro"},
+					"discount": None,
+				}
+			}
+		}
+		resp = self.client.post("/api/stripe/webhook", data=event, content_type="application/json")
+		self.assertEqual(resp.status_code, 200)
+		sub.refresh_from_db()
+		self.assertIsNone(sub.discount)

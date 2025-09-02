@@ -41,12 +41,5 @@ jobs:
           fi
       - name: Gzip size budget (total JS)
         run: |
-          set -euo pipefail
-          total=$(find web/dist -type f -name "*.js" -print0 | xargs -0 -I{} sh -c 'gzip -c "{}" | wc -c' | awk '{s+=$1} END{print s+0}')
-          echo "Total gzipped JS bytes: $total"
-          # Soft budget; adjust as needed in Todo.md
-          budget=600000
-          if [ "$total" -gt "$budget" ]; then
-            echo "Error: total gzipped JS ($total) exceeds budget ($budget)" >&2
-            exit 1
-          fi
+          cd web
+          npm run --silent size:check

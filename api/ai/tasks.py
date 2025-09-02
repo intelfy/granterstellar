@@ -176,6 +176,7 @@ def run_format(job_id: int):
             full_text=job.input_json.get('full_text') or '',
             template_hint=job.input_json.get('template_hint') or None,
             file_refs=job.input_json.get('file_refs') or None,
+            deterministic=True,
         )
         job.result_json = {"formatted_text": res.text}
         job.status = 'done'

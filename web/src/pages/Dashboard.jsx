@@ -1,23 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, apiMaybeAsync, apiUpload, safeOpenExternal, openDebugLocal, formatDiscount } from '../lib/core.js'
 
-function SectionDiff({ before = '', after = '' }) {
-  if (!before && !after) return null
-  return (
-    <div>
-      <div>
-        <div>Previous</div>
-        <pre>{before || '—'}</pre>
-      </div>
-      <div>
-        <div>Draft</div>
-        <pre>{after || '—'}</pre>
-      </div>
-    </div>
-  )
-}
-
-function AuthorPanel({ token, orgId, proposal, onSaved, usage, onUpgrade }) {
+function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
   const [plan, setPlan] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -33,12 +17,30 @@ function AuthorPanel({ token, orgId, proposal, onSaved, usage, onUpgrade }) {
   const [filesBySection, setFilesBySection] = useState({})
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [note, setNote] = useState('')
+  const [me, setMe] = useState(null)
 
   const sections = plan?.sections || []
   const current = sections[sectionIndex]
   const prevText = proposal?.content?.sections?.[current?.id]?.content || ''
   const approvedById = proposal?.content?.sections || {}
   const allApproved = sections.length > 0 && sections.every(s => !!approvedById[s.id])
+
+  useEffect(() => {
+    // Initialize note from proposal.content.meta.note
+    const n = proposal?.content?.meta?.note
+    setNote(typeof n === 'string' ? n : '')
+  }, [proposal?.id])
+
+  useEffect(() => {
+    // Fetch current user (for display only)
+    (async () => {
+      try {
+        const res = await api('/me', { token })
+        setMe(res?.user || null)
+      } catch {}
+    })()
+  }, [token])
 
   const onUploadFile = async (e) => {
     const file = e.target.files && e.target.files[0]
@@ -52,7 +54,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, usage, onUpgrade }) {
         [current.id]: [ ...(prev[current.id] || []), { ...info, name: file.name } ],
       }))
       e.target.value = ''
-    } catch (err) {
+  } catch {
       setUploadError('Upload failed')
     } finally {
       setUploading(false)
@@ -70,7 +72,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, usage, onUpgrade }) {
       setAnswers({})
       setDraft('')
       setChangeReq('')
-    } catch (e) {
+  } catch {
       setError('Failed to load plan')
     } finally {
       setLoading(false)
@@ -94,7 +96,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, usage, onUpgrade }) {
         },
       })
       setDraft(res?.draft_text || '')
-    } catch (e) {
+  } catch {
       setError('Write failed')
     } finally { setLoading(false) }
   }
@@ -117,7 +119,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, usage, onUpgrade }) {
         },
       })
       setDraft(res?.draft_text || draft)
-    } catch (e) {
+  } catch {
       setError('Revise failed')
     } finally { setLoading(false) }
   }
@@ -139,8 +141,24 @@ function AuthorPanel({ token, orgId, proposal, onSaved, usage, onUpgrade }) {
         setDraft('')
         setChangeReq('')
       }
-    } catch (e) {
+  } catch {
       setError('Save failed')
+    } finally { setLoading(false) }
+  }
+
+  const saveNote = async () => {
+    // Patch proposal content.meta.note without touching sections
+    const content = { ...(proposal.content || {}) }
+    content.meta = { ...(content.meta || {}), note }
+    const body = { content, schema_version: proposal.schema_version || plan?.schema_version || 'v1' }
+    setLoading(true)
+    setError('')
+    try {
+      await api(`/proposals/${proposal.id}/`, { method: 'PATCH', token, orgId: orgId || undefined, body })
+      setLastSavedAt(new Date())
+      await onSaved?.()
+    } catch {
+      setError('Save note failed')
     } finally { setLoading(false) }
   }
 
@@ -172,13 +190,25 @@ function AuthorPanel({ token, orgId, proposal, onSaved, usage, onUpgrade }) {
         },
       })
       setFormattedText(res?.formatted_text || '')
-    } catch (e) {
+  } catch {
       setError('Final format failed')
     } finally { setLoading(false) }
   }
 
   return (
     <div>
+      <div style={{ borderTop: '1px solid #eee', paddingTop: 8, marginTop: 8 }}>
+        <div><strong>Author</strong>: #{proposal.author}</div>
+        <div><strong>Created</strong>: {proposal.created_at ? new Date(proposal.created_at).toLocaleString() : '—'}</div>
+        <div><strong>Last edited</strong>: {proposal.last_edited ? new Date(proposal.last_edited).toLocaleString() : '—'}{me ? ` by ${me.username || 'you'}` : ''}{lastSavedAt ? ' (just now)' : ''}</div>
+        <div style={{ marginTop: 6 }}>
+          <div>Internal note</div>
+          <textarea data-testid="note-text" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note for collaborators" />
+          <div>
+            <button data-testid="note-save" onClick={saveNote} disabled={loading}>Save Note</button>
+          </div>
+        </div>
+      </div>
       {!plan ? (
         <div>
           <div>Plan your proposal</div>
@@ -235,7 +265,18 @@ function AuthorPanel({ token, orgId, proposal, onSaved, usage, onUpgrade }) {
               <button onClick={applyChanges} disabled={loading || !(draft || prevText)}>Revise</button>
               <button onClick={approveAndSave} disabled={loading || !(draft || prevText)}>Approve & Save</button>
             </div>
-            <SectionDiff before={prevText} after={draft || prevText} />
+            <div>
+              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div>Previous</div>
+                  <pre>{prevText || '—'}</pre>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div>Draft</div>
+                  <pre>{(draft || prevText) || '—'}</pre>
+                </div>
+              </div>
+            </div>
             {error && <div>{error}</div>}
             {loading && <div>Working…</div>}
           </div>
@@ -263,7 +304,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, usage, onUpgrade }) {
   )
 }
 
-function Proposals({ token, selectedOrgId }) {
+export function Proposals({ token, selectedOrgId }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -285,7 +326,7 @@ function Proposals({ token, selectedOrgId }) {
       await api(`/proposals/${p.id}/`, { method: 'PATCH', token, orgId: orgId || undefined, body: { state: 'archived' } })
       await refresh()
       await refreshUsage()
-    } catch (e) {
+  } catch (e) {
       alert('Archive failed: ' + (e?.data?.error || e.message))
     }
   }
@@ -294,7 +335,7 @@ function Proposals({ token, selectedOrgId }) {
       await api(`/proposals/${p.id}/`, { method: 'PATCH', token, orgId: orgId || undefined, body: { state: 'draft' } })
       await refresh()
       await refreshUsage()
-    } catch (e) {
+  } catch (e) {
       if (e.status === 402) alert('Unarchive blocked: ' + reasonLabel(e?.data?.reason))
       else alert('Unarchive failed: ' + (e?.data?.error || e.message))
     }
@@ -335,7 +376,7 @@ function Proposals({ token, selectedOrgId }) {
         }
       }
       alert('Export still processing; try again later')
-    } catch (e) {
+  } catch {
       alert('Export failed: ' + e.message)
     } finally {
       setExporting(null)
@@ -352,7 +393,7 @@ function Proposals({ token, selectedOrgId }) {
       await api('/proposals/', { method: 'POST', token, orgId: orgId || undefined, body: { content: { meta: { title: 'Untitled' }, sections: {} }, schema_version: 'v1' } })
       await refresh()
       await refreshUsage()
-    } catch (e) {
+  } catch {
       if (e.status === 402 && e.data) {
         const reason = e.data.reason || 'quota'
         alert(`Paywall: ${reasonLabel(reason)}. Click Upgrade to continue.`)
@@ -396,7 +437,7 @@ function Proposals({ token, selectedOrgId }) {
         }
         await refreshUsage()
       }
-    } catch (e) {
+  } catch {
       alert('Checkout unavailable')
     }
   }
@@ -413,7 +454,7 @@ function Proposals({ token, selectedOrgId }) {
           openDebugLocal(res.url)
         }
       }
-    } catch (e) {
+  } catch {
       alert('Portal unavailable')
     }
   }
@@ -422,7 +463,7 @@ function Proposals({ token, selectedOrgId }) {
       await api('/billing/cancel', { method: 'POST', token, orgId: orgId || undefined, body: {} })
       await refreshUsage()
       alert('Subscription will cancel at period end.')
-    } catch (e) {
+  } catch {
       alert('Cancel failed')
     }
   }
@@ -431,7 +472,7 @@ function Proposals({ token, selectedOrgId }) {
       await api('/billing/resume', { method: 'POST', token, orgId: orgId || undefined, body: {} })
       await refreshUsage()
       alert('Subscription resumed.')
-    } catch (e) {
+  } catch {
       alert('Resume failed')
     }
   }
@@ -493,7 +534,7 @@ function Proposals({ token, selectedOrgId }) {
   )
 }
 
-function Orgs({ token, onSelectOrg }) {
+export function Orgs({ token, onSelectOrg }) {
   const [items, setItems] = useState([])
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
@@ -607,3 +648,7 @@ export default function Dashboard({ token, selectedOrgId, onSelectOrg }) {
     </div>
   )
 }
+
+// Named exports for tests
+export { AuthorPanel }
+export { default as SectionDiff } from '../components/SectionDiff.jsx'

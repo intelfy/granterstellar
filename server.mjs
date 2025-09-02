@@ -357,10 +357,11 @@ if (process.env.ENABLE_HTTPS === '1' && HTTPS_KEY_PATH && HTTPS_CERT_PATH) {
   }
 } else {
   // In production, refuse to start plain HTTP to avoid cleartext traffic; rely on external HTTPS termination.
-  if (process.env.NODE_ENV === 'production') {
-    console.error('Refusing to start HTTP server in production without ENABLE_HTTPS=1');
-    process.exit(1);
-  }
+    const allowPlainHttp = process.env.ALLOW_HTTP_IN_PROD === '1';
+    if (process.env.NODE_ENV === 'production' && !allowPlainHttp) {
+      console.error('Refusing to start HTTP server in production without ENABLE_HTTPS=1 (or ALLOW_HTTP_IN_PROD=1 when behind a proxy)');
+      process.exit(1);
+    }
   // Note: HTTPS is typically terminated by Traefik/Coolify in deployment; local dev can use HTTP.
   http.createServer(handle).listen(PORT, () => {
     console.log(`Landing server running on http://localhost:${PORT}`);

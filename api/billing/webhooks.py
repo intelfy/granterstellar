@@ -294,9 +294,13 @@ def stripe_webhook(request):
         qty = _extract_qty_from_obj(data)
         if isinstance(qty, int) and qty >= 0:
             sub.seats = qty
+        # Track discount changes for audit/diagnostics
+        prev_discount = getattr(sub, 'discount', None)
         disc_summary = _extract_discount(data)
+        action = None
         if disc_summary is not None:
             sub.discount = disc_summary  # type: ignore[assignment]
+            action = 'set'
         else:
             # If the payload explicitly carries a discount field (null) or an empty discounts list,
             # clear any previously stored discount so UI reflects removal.
@@ -304,7 +308,27 @@ def stripe_webhook(request):
                 'discounts' in data and isinstance(data.get('discounts'), list) and len(data.get('discounts') or []) == 0
             ):
                 sub.discount = None  # type: ignore[assignment]
+                action = 'cleared'
         sub.save()
+        try:
+            logger.info(
+                'billing.subscription_upserted',
+                extra={
+                    'event_type': event_type,
+                    'stripe_subscription_id': sub.stripe_subscription_id,
+                    'stripe_customer_id': sub.stripe_customer_id,
+                    'tier': sub.tier,
+                    'status': sub.status,
+                    'seats': sub.seats,
+                    'discount_action': action,
+                    'discount_prev': (prev_discount or {}).get('id') if isinstance(prev_discount, dict) else None,
+                    'discount_new': (sub.discount or {}).get('id') if isinstance(getattr(sub, 'discount', None), dict) else None,
+                    'owner_user_id': getattr(sub.owner_user, 'id', None),
+                    'owner_org_id': getattr(sub.owner_org, 'id', None),
+                },
+            )
+        except Exception:
+            pass
 
     event_type = event.get('type', '') if isinstance(event, dict) else getattr(event, 'type', '')
     obj = _as_dict(event.get('data', {}).get('object')) if isinstance(event, dict) else {}
@@ -397,6 +421,21 @@ def stripe_webhook(request):
                     }
                 if discount:
                     Subscription.objects.filter(stripe_subscription_id=sub_id).update(discount=discount)
+                    try:
+                        logger.info(
+                            'billing.discount_applied_from_invoice',
+                            extra={
+                                'event_type': event_type,
+                                'stripe_subscription_id': sub_id,
+                                'discount_id': discount.get('id'),
+                                'discount_source': discount.get('source'),
+                                'percent_off': discount.get('percent_off'),
+                                'amount_off': discount.get('amount_off'),
+                                'currency': discount.get('currency'),
+                            },
+                        )
+                    except Exception:
+                        pass
         except Exception:
             pass
         # Also process overage bundle purchases into ExtraCredits

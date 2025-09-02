@@ -43,6 +43,7 @@ Authoring (AuthorPanel)
 
 - Section header: "Section {i}/{n}: {title}"; schema line includes "Schema:" and optional "Last saved"
 - Inputs list: for each input key, ``<label>{key}</label>`` + ``<textarea>``
+  - Internal note: ``<textarea data-testid="note-text">`` persists to proposal meta for collaborators
 - File attach:
   - Label: ``<label for="file-{sectionId|section}">Attach files…</label>``
   - File input id: `#file-{sectionId|section}`
@@ -95,6 +96,7 @@ App Shell
 - Header: ``<h1>Granterstellar</h1>``
 - Buttons: ``<button>Logout</button>``, ``<button>Billing</button>``
 - Org tip: "Tip: Select an organization…" + ``<select>`` with org options + buttons
+- Global invite banner: container ``div[data-testid="invite-banner"][aria-label="org-invite"]`` with accept/dismiss buttons
 
 Errors & Misc
 

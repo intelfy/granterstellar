@@ -11,6 +11,7 @@ from django.db.models import QuerySet
 from typing import Optional
 from orgs.models import Organization
 from billing.quota import get_subscription_for_scope
+from django.utils import timezone
 
 
 class DebugOrAuthPermission(BasePermission):
@@ -25,6 +26,60 @@ class DebugOrAuthPermission(BasePermission):
         if settings.DEBUG or getattr(settings, 'AI_TEST_OPEN', False):
             return True
         return IsAuthenticated().has_permission(request, view)
+
+
+def _compute_rate_limits(tier: str) -> int:
+    """Return max requests per minute for the given tier.
+
+    Defaults:
+      - free: 0 (blocked by gating already)
+      - pro: 20 rpm
+      - enterprise: 60 rpm
+    Overridable via settings: AI_RATE_PER_MIN_FREE/PRO/ENTERPRISE
+    """
+    tier_key = (tier or 'pro').lower()
+    if tier_key == 'enterprise':
+        return int(getattr(settings, 'AI_RATE_PER_MIN_ENTERPRISE', 60) or 60)
+    if tier_key == 'free':
+        return int(getattr(settings, 'AI_RATE_PER_MIN_FREE', 0) or 0)
+    return int(getattr(settings, 'AI_RATE_PER_MIN_PRO', 20) or 20)
+
+
+def _rate_limit_check(request, endpoint_type: str) -> Optional[Response]:
+    """Enforce a per-user per-minute request rate limit by tier.
+
+    Returns a Response(429) if limited; otherwise None to continue.
+    Skips in DEBUG or when AI_TEST_OPEN is set.
+    """
+    if settings.DEBUG or getattr(settings, 'AI_TEST_OPEN', False):
+        return None
+    user = getattr(request, 'user', None)
+    if not getattr(user, 'is_authenticated', False):
+        return None  # gating handles unauthorized
+    # Determine org scope for tier
+    org: Optional[Organization] = None
+    org_id = request.META.get('HTTP_X_ORG_ID', '')
+    if org_id and str(org_id).isdigit():
+        try:
+            org = Organization.objects.filter(id=int(org_id)).first()
+        except Exception:
+            org = None
+    tier, _status = get_subscription_for_scope(user, org)
+    limit = _compute_rate_limits(tier)
+    if limit <= 0:
+        return None
+    # Count metrics in the last 60 seconds for this user and endpoint type
+    from .models import AIMetric
+    now = timezone.now()
+    one_min_ago = now - timezone.timedelta(seconds=60)
+    recent = AIMetric.objects.filter(created_by=user, type=endpoint_type, created_at__gte=one_min_ago).count()
+    if recent >= limit:
+        resp = Response({"error": "rate_limited", "retry_after": 30}, status=429)
+        resp["Retry-After"] = "30"
+        resp["X-Rate-Limit-Limit"] = str(limit)
+        resp["X-Rate-Limit-Remaining"] = "0"
+        return resp
+    return None
 
 
 @api_view(["POST"])
@@ -82,6 +137,10 @@ def write(request):
             resp = Response({"error": "quota_exceeded", "reason": "ai_requires_pro"}, status=402)
             resp["X-Quota-Reason"] = "ai_requires_pro"
             return resp
+    # Rate limit (per-minute by tier)
+    rl = _rate_limit_check(request, 'write')
+    if rl is not None:
+        return rl
     section_id = sanitize_text(request.data.get("section_id"), max_len=128)
     proposal_id = None
     try:
@@ -143,6 +202,10 @@ def revise(request):
             resp = Response({"error": "quota_exceeded", "reason": "ai_requires_pro"}, status=402)
             resp["X-Quota-Reason"] = "ai_requires_pro"
             return resp
+    # Rate limit (per-minute by tier)
+    rl = _rate_limit_check(request, 'revise')
+    if rl is not None:
+        return rl
     change_request = sanitize_text(request.data.get("change_request", ""), max_len=4000)
     base_text = sanitize_text(request.data.get("base_text", ""), max_len=20000, neutralize_injection=False)
     section_id = sanitize_text(request.data.get("section_id"), max_len=128)
@@ -206,6 +269,10 @@ def format(request):
             resp = Response({"error": "quota_exceeded", "reason": "ai_requires_pro"}, status=402)
             resp["X-Quota-Reason"] = "ai_requires_pro"
             return resp
+    # Rate limit (per-minute by tier)
+    rl = _rate_limit_check(request, 'format')
+    if rl is not None:
+        return rl
     # Final formatting across the whole composed text; optional template hint
     full_text = sanitize_text(request.data.get("full_text", ""), max_len=200000, neutralize_injection=False)
     template_hint = sanitize_text(request.data.get("template_hint", None), max_len=256) if request.data else None
@@ -236,7 +303,13 @@ def format(request):
         return Response({"job_id": job.id, "status": job.status})
     provider = get_provider(getattr(settings, 'AI_PROVIDER', None))
     t0 = time.time()
-    res = provider.format_final(full_text=full_text, template_hint=template_hint or None, file_refs=file_refs or None)
+    # Exports rely on deterministic formatting; enforce deterministic pass here
+    res = provider.format_final(
+        full_text=full_text,
+        template_hint=template_hint or None,
+        file_refs=file_refs or None,
+        deterministic=True,
+    )
     dt_ms = int((time.time() - t0) * 1000)
     from .models import AIMetric
     AIMetric.objects.create(
