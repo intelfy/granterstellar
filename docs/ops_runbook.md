@@ -81,6 +81,7 @@ VS Code tasks
 - Policies live in `db_policies/migrations/0001_rls.py` (+ fixes in 0002)
 - Tests are Postgres-only: run the task "API: test (RLS on Postgres)" with DATABASE_URL set
 - Least-privileged DB role guidance: `docs/rls_postgres.md`
+- Matrix coverage: see `db_policies/tests/test_rls_matrix.py` for consolidated CRUD + visibility scenarios. It deliberately emphasizes negative membership insertion (non-admin insert must fail) to guard least-privilege guarantees while keeping setup stable.
 
 ## Security headers and CSP
 

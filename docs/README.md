@@ -19,6 +19,7 @@ Active docs
 - AI rate limiting & gating: `docs/ai_rate_limiting.md`
 - Proposals model/endpoints and autosave: `docs/proposals.md`
 - Postgres RLS policies and least-privileged DB user: `docs/rls_postgres.md`
+	- Matrix test coverage file: `db_policies/tests/test_rls_matrix.py` (CRUD + negative membership insert focus)
 - Security hardening notes: `docs/security_hardening.md`
 - Ops runbook: `docs/ops_runbook.md`
 
