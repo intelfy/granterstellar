@@ -20,11 +20,11 @@ RUN if [ "$STRIP_PY" = "1" ]; then \
 		python -c "import compileall,sys; sys.exit(0 if compileall.compile_dir('/app', maxlevels=10, force=True, quiet=1, optimize=2) else 1)" \
 		&& find /app -type f -name '*.py' -print -delete; \
 	fi
-# Copy built SPA into staticfiles
-# Copy built SPA under /app/staticfiles/app
+# Copy built SPA into staticfiles (served via WhiteNoise)
+# Built assets land at /app/staticfiles/app
 COPY --from=web-build /build/web/dist /app/staticfiles/app
 # Copy landing assets into staticfiles root so / serves landing
-# Copy only the minimal public assets needed; docs and markdown are excluded via .dockerignore
+# Minimal public assets only; docs, tests, markdown, maps excluded by .dockerignore for smaller context
 COPY index.html styles.css hero.svg script.js /app/staticfiles/
 COPY animations /app/staticfiles/animations
 COPY vendor /app/staticfiles/vendor

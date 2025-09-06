@@ -1,10 +1,14 @@
 version: '3.9'
+
+# Minimal compose file for the standalone landing/waitlist server (port 5173).
+# For full stack (API + Postgres + Redis + SPA dev), see app-compose.yml.
+# This file is intentionally small; production typically uses the single API image (api/Dockerfile) serving landing + SPA.
 services:
   landing:
     build: .
     image: granterstellar-landing:latest
     ports:
-    - "5173:5173"
+      - "5173:5173"
     restart: unless-stopped
     env_file:
       - .env

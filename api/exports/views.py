@@ -54,8 +54,12 @@ def create_export(request):
     if fmt == 'md':
         data = md.encode('utf-8')
         ext = 'md'
-        import hashlib
-        checksum = hashlib.sha256(data).hexdigest()
+        try:
+            from app.common.files import compute_checksum
+            checksum = compute_checksum(data).hex
+        except Exception:
+            import hashlib as _hl
+            checksum = _hl.sha256(data).hexdigest()
     elif fmt == 'pdf':
         data, checksum = render_pdf_from_text(md)
         ext = 'pdf'

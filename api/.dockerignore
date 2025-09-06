@@ -5,6 +5,16 @@ __pycache__
 *.pyd
 *.egg-info
 
+# Documentation & markdown
+**/*.md
+
+# Tests
+**/tests/**
+**/__tests__/**
+
+# Source maps (should not be present in prod build)
+**/*.map
+
 # Env
 .env
 *.env

@@ -10,5 +10,27 @@ node_modules/
 
 # Local DB and generated media
 api/db.sqlite3
-api/db.sqlite3
 api/media/
+
+# Python virtual environments
+.venv/
+venv/
+pip-wheel-metadata/
+
+# Build artifacts
+web/dist/
+dist/
+
+# Test & coverage outputs
+.coverage
+coverage/
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+
+# Type checker / misc caches
+*.mypy_cache/
+*.pytype/
+
+# Node build cache (Vite)
+web/.vite/

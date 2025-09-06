@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from io import BytesIO
 import re
 import zipfile
@@ -38,6 +37,8 @@ def _normalize_pdf_for_checksum(data: bytes) -> bytes:
     try:
         data = re.sub(rb"/ID\s*\[\s*<[^>]*>\s*<[^>]*>\s*\]", b"/ID [<000000><000000>]", data)
         data = re.sub(rb"startxref\s*\d+", b"startxref 0", data)
+        data = re.sub(rb"/CreationDate\s*\(D:[^\)]+\)", b"/CreationDate (D:19700101000000Z)", data)
+        data = re.sub(rb"/ModDate\s*\(D:[^\)]+\)", b"/ModDate (D:19700101000000Z)", data)
     except Exception:
         pass
     return data
@@ -46,18 +47,16 @@ def _normalize_pdf_for_checksum(data: bytes) -> bytes:
 def render_pdf_from_text(text: str) -> tuple[bytes, str]:
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=LETTER)
-    # Deterministic metadata
-    try:
-        info = c._doc.info
+    # Deterministic metadata (guarded: ReportLab internals may differ across versions)
+    try:  # Accessing protected internals for deterministic metadata; ignore type
+        info = c._doc.info  # type: ignore[attr-defined]
         info.title = "Granterstellar Export"
         info.author = "Granterstellar"
         info.creator = "Granterstellar"
         info.producer = "ReportLab"
-        # Set fixed creation/mod dates to epoch
-        # PDF date format: D:YYYYMMDDHHmmSSZ
         info.creationDate = 'D:19700101000000Z'
         info.modDate = 'D:19700101000000Z'
-    except Exception:
+    except Exception:  # pragma: no cover - defensive
         pass
     width, height = LETTER
     y = height - 72
@@ -70,8 +69,21 @@ def render_pdf_from_text(text: str) -> tuple[bytes, str]:
     c.showPage()
     c.save()
     data = buffer.getvalue()
+    # Post-process raw PDF to enforce epoch Creation/Mod dates so raw bytes deterministic
+    try:
+        data = re.sub(rb"/CreationDate\s*\(D:[^\)]+\)", b"/CreationDate (D:19700101000000Z)", data)
+        data = re.sub(rb"/ModDate\s*\(D:[^\)]+\)", b"/ModDate (D:19700101000000Z)", data)
+    except Exception:  # pragma: no cover - defensive
+        pass
     normalized = _normalize_pdf_for_checksum(data)
-    checksum = hashlib.sha256(normalized).hexdigest()
+    # Defer to common checksum utility for consistency
+    try:
+        from app.common.files import compute_checksum  # local import to avoid early app loading side-effects
+        checksum = compute_checksum(normalized).hex
+    except Exception:
+        # Fallback to direct hashlib if utility unavailable (defensive during migrations)
+        import hashlib as _hl
+        checksum = _hl.sha256(normalized).hexdigest()
     return data, checksum
 
 
@@ -86,10 +98,10 @@ def render_docx_from_markdown(md: str) -> tuple[bytes, str]:
     """
     doc = Document()
     # Set a readable base style size
-    try:
-        style = doc.styles['Normal']
-        style.font.size = Pt(11)
-    except Exception:
+    try:  # Styles may not always be mutable
+        style = doc.styles['Normal']  # type: ignore[index]
+        style.font.size = Pt(11)  # type: ignore[attr-defined]
+    except Exception:  # pragma: no cover - defensive
         pass
 
     for raw in md.splitlines():
@@ -139,5 +151,10 @@ def render_docx_from_markdown(md: str) -> tuple[bytes, str]:
         return out_bio.getvalue()
 
     data = _normalize_docx_zip(raw)
-    checksum = hashlib.sha256(data).hexdigest()
+    try:
+        from app.common.files import compute_checksum
+        checksum = compute_checksum(data).hex
+    except Exception:
+        import hashlib as _hl
+        checksum = _hl.sha256(data).hexdigest()
     return data, checksum

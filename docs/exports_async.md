@@ -1,3 +1,10 @@
+[[AI_CONFIG]]
+FILE_TYPE: 'EXPORTS_RUNBOOK'
+INTENDED_READER: 'AI_AGENT'
+PURPOSE: ['Explain async export setup', 'Guide Celery worker configuration', 'Ensure reliable export processing']
+PRIORITY: 'LOW'
+[[/AI_CONFIG]]
+
 # Async exports and Celery
 
 This app supports exporting proposals to Markdown, PDF, and DOCX.

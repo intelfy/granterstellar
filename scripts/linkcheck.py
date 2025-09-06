@@ -21,7 +21,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass
-from typing import Iterable, List, Tuple
+from typing import Iterable
 
 try:
     import requests
@@ -55,19 +55,25 @@ class Finding:
 
 
 def iter_repo_files(root: str) -> Iterable[str]:
-    for dirpath, dirnames, filenames in os.walk(root):
+    for dirpath, _dirnames, filenames in os.walk(root):
         # skip virtual envs and media/output
         parts = dirpath.split(os.sep)
-        if ".venv" in parts or "node_modules" in parts or "media" in parts or ".git" in parts:
+        if (
+            ".venv" in parts
+            or "node_modules" in parts
+            or "media" in parts
+            or ".git" in parts
+            or "dist" in parts  # skip built frontend artifacts (minified HTML -> false link positives)
+        ):
             continue
         for f in filenames:
             if f.endswith((".md", ".html")):
                 yield os.path.join(dirpath, f)
 
 
-def extract_links(path: str) -> List[str]:
+def extract_links(path: str) -> list[str]:
     try:
-        with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+        with open(path, encoding="utf-8", errors="ignore") as fh:
             text = fh.read()
     except Exception:
         return []
@@ -99,7 +105,7 @@ def should_skip(url: str, external: bool) -> bool:
     return False
 
 
-def check_local(path: str, link: str) -> Tuple[bool, str]:
+def check_local(path: str, link: str) -> tuple[bool, str]:
     # strip anchors
     target, *_ = link.split("#", 1)
     # ignore root-absolute paths like /api/* or /media/* handled by skip
@@ -113,7 +119,7 @@ def check_local(path: str, link: str) -> Tuple[bool, str]:
     return False, f"missing file: {full}"
 
 
-def check_external(url: str, timeout: float = 6.0) -> Tuple[bool, str]:
+def check_external(url: str, timeout: float = 6.0) -> tuple[bool, str]:
     if requests is None:
         return True, "skipped (requests not installed)"
     try:
@@ -138,7 +144,7 @@ def main() -> int:
     args = ap.parse_args()
 
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    findings: List[Finding] = []
+    findings: list[Finding] = []
     files_scanned = 0
     links_checked = 0
 
@@ -163,7 +169,10 @@ def main() -> int:
 
     dt = time.time() - t0
     if findings:
-        print(f"Link check: FAIL — {len(findings)} issues across {files_scanned} files, {links_checked} links checked in {dt:.1f}s")
+        print(
+            f"Link check: FAIL — {len(findings)} issues across {files_scanned} files, "
+            f"{links_checked} links checked in {dt:.1f}s"
+        )
         for f in findings:
             print(f"- [{f.kind}] {f.file}: {f.link} — {f.error}")
         return 1

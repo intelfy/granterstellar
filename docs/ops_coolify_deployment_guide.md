@@ -1,3 +1,10 @@
+[[AI_CONFIG]]
+FILE_TYPE: 'DEPLOYMENT_GUIDE'
+INTENDED_READER: 'LOW_TECHNICAL_HUMAN_OPERATOR'
+PURPOSE: ['Provide step-by-step deployment instructions', 'Ensure correct environment variable configuration', 'Facilitate easy setup with Coolify and Traefik', 'Ensure foolproof deployment process']
+PRIORITY: 'CRITICAL'
+[[/AI_CONFIG]]
+
 # Granterstellar — Install & Coolify Deployment Guide (idiot‑proof)
 
 This guide tells you exactly what to click and what to paste to deploy Granterstellar using Coolify (with Traefik). No Linux or Docker knowledge required.
@@ -8,6 +15,7 @@ What you’ll get
 - Optional: a separate “Landing” app for a waitlist form (port 5173). You can skip this.
 - Managed Postgres (required) and Redis (optional unless you want async jobs).
 - SPA performance: route-level code splitting, idle-time preloads for likely next pages, and optional Web Vitals logging.
+- Lean image: `.dockerignore` prunes markdown/docs/tests/source maps from build context.
 
 Before you begin
 
@@ -34,6 +42,7 @@ Key concepts (keep these defaults)
 - Router base: VITE_ROUTER_BASE = /app
 - App hosts: APP_HOSTS = comma‑separated hostnames that should redirect / → /app
 - Invite acceptance: SPA surfaces a global invite banner when an invite token is in the URL (selectors in docs/style-docs.md).
+ - Distinct JWT signing key: set `JWT_SIGNING_KEY` different from `SECRET_KEY` (enforced by forthcoming doctor script) to allow rotation without invalidating Django internals.
 
 Step 1 — Create PostgreSQL in Coolify
 
@@ -179,8 +188,7 @@ PRICE_BUNDLE_25=
 AI_PROVIDER=
 OPENAI_API_KEY=
 GEMINI_API_KEY=
-```
- 
+
 Uploads cap enforcement
 
 - The upload API enforces FILE_UPLOAD_MAX_BYTES as the hard cap. If unset, it falls back to FILE_UPLOAD_MAX_MEMORY_SIZE.
@@ -224,6 +232,7 @@ Inline styles escape hatch
 
 - CSP_ALLOW_INLINE_STYLES: Set to 1 to temporarily allow inline CSS by adding 'unsafe-inline' to style-src. Default is 0 (disabled), which is recommended for security.
    - Example: CSP_ALLOW_INLINE_STYLES=1 (use only as a short-term workaround while migrating styles to external CSS).
+   - Upcoming: optional CSP reporting (`CSP_REPORT_URI`, `CSP_REPORT_ONLY=1`) for progressive tightening (see security_hardening.md once updated).
 
 
 7) Build Arguments (optional): STRIP_PY=1 to obfuscate Python source in the image (enable for production later).
@@ -360,6 +369,7 @@ Common mistakes (and fixes)
 - Stripe webhook 401/400: set STRIPE_WEBHOOK_SECRET in production; in DEBUG webhooks accept unsigned JSON.
 - SPA not loading assets: keep VITE_BASE_URL=/static/app/ (matches Dockerfile copy path and Django static path).
 - Invites email not sent: configure EMAIL_* SMTP settings and INVITE_SENDER_DOMAIN; check provider logs.
+ - JWT SIGNING issues: ensure `JWT_SIGNING_KEY` is set and not equal to `SECRET_KEY`; rotate signing key by overlapping validity (short access tokens) and updating refresh logic carefully.
 
 ## Run RLS (Postgres) tests locally
 

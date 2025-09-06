@@ -1,6 +1,13 @@
+[[AI_CONFIG]]
+FILE_TYPE: 'MARKETING_README'
+INTENDED_READER: 'NON_TECHNICAL_PUBLIC'
+PURPOSE: ['Provide an overview of the application', 'Highlight key features and technologies', 'Guide users to relevant documentation', 'Facilitate understanding for non-technical stakeholders']
+PRIORITY: 'HIGH'
+[[/AI_CONFIG]]
+
 # Granterstellar — Full App Guide · Coolify + Traefik
 
-This README covers the full application (SPA + API + DB). For the docs index, see `docs/README.md`. For install and env details, see `docs/install_guide.md`.
+This README covers the full application (SPA + API + DB). For the docs index, see `docs/README.md`. For install and env details, see `docs/ops_coolify_deployment_guide.md` (formerly install_guide).
 
 Contributing? See `CONTRIBUTING.md` for local tasks, lint/tests, and conventions.
 
@@ -22,9 +29,11 @@ Contributing? See `CONTRIBUTING.md` for local tasks, lint/tests, and conventions
 
 - Backend: Django + DRF, Postgres, optional Celery/Redis
 - Frontend: React (Vite)
-- AI: Provider abstraction (GPT-5 plans/writes, Gemini formats/polishes). See install guide for gating and plan requirements.
+- AI: Provider abstraction (GPT-5 plans/writes, Gemini formats/polishes) with plan gating, per‑minute limiter, and deterministic single-write debug limiter (see `docs/ai_rate_limiting.md`).
 - Billing: Stripe subscriptions + bundles + customer portal/webhooks
 - Exports: Canonical Markdown → DOCX/PDF, deterministic outputs/checksums
+  - Design & guarantees: see `docs/deterministic_exports.md`
+  - Rate limiting & gating: see `docs/ai_rate_limiting.md`
 - OCR: PDFs via pdfminer; optional image OCR via pytesseract/PIL; optional PDF OCR via `ocrmypdf` (behind flags)
 
 ## Deployment topology
@@ -35,7 +44,9 @@ Single image recommended:
 - API serves landing at `/` and SPA index for `/app` routes; `/api/*` for API; static/media via WhiteNoise.
 - Optional host-aware redirect: requests to configured app hosts at `/` redirect to `/app` (set `APP_HOSTS` as a comma-separated list of hostnames).
 
-See `docs/install_guide.md` for CSP allow-lists, domains, and environment examples. Test domain: <https://grants.intelfy.dk>; projected production: <https://forgranted.io>. Analytics host: <https://data.intelfy.dk>.
+See `docs/ops_coolify_deployment_guide.md` for CSP allow-lists, domains, and environment examples. Test domain: <https://grants.intelfy.dk>; projected production: <https://forgranted.io>. Analytics host: <https://data.intelfy.dk>.
+
+Image hygiene: build context excludes markdown/docs/tests/source maps via `.dockerignore` to minimize image surface and speed builds.
 
 ## Local development (no Docker)
 
@@ -53,12 +64,12 @@ The SPA calls `/api` by default. When running API separately, set `VITE_API_BASE
 
 - Start the API (DEBUG) and the web dev server via VS Code tasks.
 - Run Stripe CLI to forward webhooks to your API:
-	- `stripe listen --print-secret --forward-to http://127.0.0.1:8000/api/stripe/webhook`
-	- Paste the printed signing secret into `STRIPE_WEBHOOK_SECRET` for the API task.
+  - `stripe listen --print-secret --forward-to http://127.0.0.1:8000/api/stripe/webhook`
+  - Paste the printed signing secret into `STRIPE_WEBHOOK_SECRET` for the API task.
 - Create a test Product/Price in your Stripe test dashboard (or via SDK).
 - Call POST `/api/billing/checkout` with `{ price_id }`.
-	- Response includes `{ url, session_id }` for Stripe Checkout.
-	- In DEBUG, if `price_id` is omitted and Stripe is configured, a minimal test Product/Price may be auto-created for convenience.
+  - Response includes `{ url, session_id }` for Stripe Checkout.
+  - In DEBUG, if `price_id` is omitted and Stripe is configured, a minimal test Product/Price may be auto-created for convenience.
 
 Discounts & promotions
 
@@ -74,7 +85,7 @@ Discounts & promotions
 
 Environment, security, and operations
 
-- For a copy‑paste environment template and full explanations (CSP, uploads, quotas, OAuth, Stripe, async), see `docs/install_guide.md`.
+- For a copy‑paste environment template and full explanations (CSP, uploads, quotas, OAuth, Stripe, async), see `docs/ops_coolify_deployment_guide.md`.
 - For deployment hardening tips, see `docs/security_hardening.md`.
 - For ops triage and health checks, see `docs/ops_runbook.md`.
 
@@ -88,5 +99,20 @@ Environment, security, and operations
 
 - Design: keep markup minimal; avoid inline styles (see `docs/design_system.md`).
 - RLS: Postgres row policies tested; middleware sets session GUCs.
-- Optional legacy landing: if you need a separate marketing-only landing, see `docs/install_guide.md` (optional step).
- 
+
+## Endpoints & quick refs
+
+- AI: `api/ai/provider.py`, `api/ai/views.py`, `api/ai/tasks.py`.
+- Exports: `api/exports/utils.py`, `api/exports/views.py` (and `api/exports/tasks.py` if async).
+- Billing: `api/billing/models.py`, `api/billing/quota.py`, `api/billing/views.py`, `api/billing/webhooks.py`.
+- Files/OCR: `api/files/views.py` (txt/docx/pdf; optional image/PDF OCR via env toggles).
+- Security middleware/CSP: `api/app/middleware.py`; CSP envs in `api/app/settings.py`.
+- RLS GUC middleware: `api/accounts/middleware.py`. Policies SQL: `api/db_policies/migrations/*`.
+- Useful ops: `scripts/media_backup.sh`; orphan scan: `api/files/management/commands/list_orphaned_media.py`.
+
+## VS Code tasks (local)
+
+- API: migrate; runserver (DEBUG); lint (ruff); tests (per-app); RLS tests on Postgres.
+- Web: dev; lint.
+- Celery worker (optional): requires Redis.
+- Stripe: run a `stripe listen --print-secret --forward-to http://127.0.0.1:8000/api/stripe/webhook` session for local webhook parity; paste the secret into the API task env.

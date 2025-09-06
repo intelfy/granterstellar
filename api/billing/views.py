@@ -1,5 +1,6 @@
 from typing import Optional
 import json
+import logging
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -20,6 +21,7 @@ from .quota import (
 )
 from proposals.models import Proposal
 from .models import Subscription
+from .services import cancel_subscription as svc_cancel_subscription, resume_subscription as svc_resume_subscription
 from .utils import get_admin_seat_capacity, get_admin_seat_usage
 from orgs.allocation import compute_enterprise_allocations
 from orgs.models import OrgProposalAllocation
@@ -35,6 +37,9 @@ try:  # pragma: no cover - exercised indirectly; disabled in DEBUG/TESTING
     import redis  # type: ignore
 except Exception:  # pragma: no cover
     redis = None  # type: ignore
+
+
+logger = logging.getLogger(__name__)
 
 
 @api_view(["GET"])
@@ -250,25 +255,27 @@ def checkout(request):
         and not (price_id or '').strip()
     ):
         if settings.DEBUG:
-            print("[billing.checkout] DEBUG: No price_id provided; attempting to auto-create test product/price...")
+            logger.debug("[billing.checkout] No price_id provided; attempting to auto-create test product/price…")
         try:
             stripe.api_key = settings.STRIPE_SECRET_KEY  # type: ignore[attr-defined]
             prod = stripe.Product.create(name="Granterstellar Local Pro (Dev)", description="Local dev subscription")  # type: ignore[attr-defined]
             pr = stripe.Price.create(product=prod.id, unit_amount=500, currency="usd", recurring={"interval": "month"})  # type: ignore[attr-defined]
             price_id = pr.get('id') if isinstance(pr, dict) else getattr(pr, 'id', '')
             if settings.DEBUG:
-                print(f"[billing.checkout] DEBUG: Auto-created price id = {price_id}")
-        except Exception as e:
+                logger.debug("[billing.checkout] Auto-created test price id=%s", price_id)
+        except Exception:  # noqa: BLE001
             # Fall back to normal handling below; surface error in DEBUG for diagnosis
             if settings.DEBUG:
-                print(f"[billing.checkout] Stripe auto-create price failed: {e}")
+                logger.exception("[billing.checkout] Stripe auto-create price failed")
 
     if not stripe or not getattr(settings, 'STRIPE_SECRET_KEY', '').strip() or not price_id:
         if settings.DEBUG:
-            print("[billing.checkout] DEBUG: Falling back to debug URL due to:")
-            print(f"  - stripe loaded: {bool(stripe)}")
-            print(f"  - STRIPE_SECRET_KEY set: {bool(getattr(settings, 'STRIPE_SECRET_KEY', '').strip())}")
-            print(f"  - price_id present: {bool(price_id)}")
+            logger.debug(
+                "[billing.checkout] Falling back to debug URL due to: stripe_loaded=%s secret_set=%s price_id_present=%s",
+                bool(stripe),
+                bool(getattr(settings, 'STRIPE_SECRET_KEY', '').strip()),
+                bool(price_id),
+            )
         if settings.DEBUG:
             # Return a fake URL for UI wiring
             return Response({"url": f"{success_url}&debug-checkout=1"})
@@ -307,10 +314,10 @@ def checkout(request):
             return Response({"error": "no_url"}, status=500)
         # Also return session id to help clients correlate and e2e test flows
         return Response({"url": url, "session_id": session_id})
-    except Exception as e:
+    except Exception:
         if settings.DEBUG:
-            # Log the error to the console for local troubleshooting
-            print(f"[billing.checkout] Stripe checkout session failed: {e}")
+            # Local troubleshooting: emit stack trace then return debug URL
+            logger.exception("[billing.checkout] Stripe checkout session failed")
             return Response({"url": f"{success_url}&debug-checkout=1"})
         return Response({"error": "checkout_failed"}, status=500)
 
@@ -339,40 +346,20 @@ def cancel_subscription(request):
     if not sub:
         return Response({"error": "not_subscribed"}, status=404)
     immediate = bool((request.data or {}).get("immediate"))
-    if immediate:
-        # Attempt immediate cancel in Stripe when configured
-        if stripe and getattr(settings, 'STRIPE_SECRET_KEY', '').strip() and sub.stripe_subscription_id:
-            try:
-                stripe.api_key = settings.STRIPE_SECRET_KEY  # type: ignore[attr-defined]
-                stripe.Subscription.delete(sub.stripe_subscription_id)  # type: ignore[attr-defined]
-            except Exception:
-                if not settings.DEBUG:
-                    return Response({"error": "stripe_error"}, status=502)
-        # Mark locally as canceled now
-        sub.status = 'canceled'
-        sub.canceled_at = timezone.now()
-        sub.cancel_at_period_end = False
-        sub.save(update_fields=['status', 'canceled_at', 'cancel_at_period_end', 'updated_at'])
-        # Cascade: if a personal subscription was canceled, mirror org subscriptions for admin to free/inactive
-        if sub.owner_user_id:
-            try:
-                from billing.utils import upsert_org_subscription_from_admin
-                for org in Organization.objects.filter(admin=sub.owner_user).iterator():
-                    upsert_org_subscription_from_admin(org)
-            except Exception:
-                pass
-        return Response({"ok": True, "canceled": True, "cancel_at_period_end": False})
-    # If Stripe configured, attempt to set cancel_at_period_end
-    if stripe and getattr(settings, 'STRIPE_SECRET_KEY', '').strip() and sub.stripe_subscription_id:
-        try:
-            stripe.api_key = settings.STRIPE_SECRET_KEY  # type: ignore[attr-defined]
-            stripe.Subscription.modify(sub.stripe_subscription_id, cancel_at_period_end=True)  # type: ignore[attr-defined]
+    changed, info = svc_cancel_subscription(sub, immediate=immediate)
+    if info.get("error"):
+        return Response(info, status=502 if info.get("error") == "stripe_error" else 400)
+    # Cascade after immediate cancel of personal subscription
+    if changed and immediate and sub.owner_user_id:
+        try:  # pragma: no cover - cascade path simple
+            from billing.utils import upsert_org_subscription_from_admin
+            for org in Organization.objects.filter(admin=sub.owner_user).iterator():
+                upsert_org_subscription_from_admin(org)
         except Exception:
-            if not settings.DEBUG:
-                return Response({"error": "stripe_error"}, status=502)
-    sub.cancel_at_period_end = True
-    sub.save(update_fields=['cancel_at_period_end', 'updated_at'])
-    return Response({"ok": True, "cancel_at_period_end": True})
+            pass
+    resp = {"ok": True}
+    resp.update(info)
+    return Response(resp)
 
 
 @api_view(["POST"])
@@ -396,13 +383,9 @@ def resume_subscription(request):
     sub = sub_qs.order_by('-updated_at').first()
     if not sub:
         return Response({"error": "not_subscribed"}, status=404)
-    if stripe and getattr(settings, 'STRIPE_SECRET_KEY', '').strip() and sub.stripe_subscription_id:
-        try:
-            stripe.api_key = settings.STRIPE_SECRET_KEY  # type: ignore[attr-defined]
-            stripe.Subscription.modify(sub.stripe_subscription_id, cancel_at_period_end=False)  # type: ignore[attr-defined]
-        except Exception:
-            if not settings.DEBUG:
-                return Response({"error": "stripe_error"}, status=502)
-    sub.cancel_at_period_end = False
-    sub.save(update_fields=['cancel_at_period_end', 'updated_at'])
-    return Response({"ok": True, "cancel_at_period_end": False})
+    changed, info = svc_resume_subscription(sub)
+    if info.get("error"):
+        return Response(info, status=502 if info.get("error") == "stripe_error" else 400)
+    resp = {"ok": True}
+    resp.update(info)
+    return Response(resp)

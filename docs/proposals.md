@@ -1,3 +1,10 @@
+[[AI_CONFIG]]
+FILE_TYPE: 'PROPOSALS_MANAGEMENT_OVERVIEW'
+INTENDED_READER: 'AI_AGENT'
+PURPOSE: ['Describe Proposals API usage', 'Explain scoping and quotas', 'Detail autosave functionality', 'Guide backend developers']
+PRIORITY: 'MEDIUM'
+[[/AI_CONFIG]]
+
 # Proposals API — Authoring and Autosave
 
 This document describes the Proposals API used by the SPA. It covers scoping, quotas, and autosave.
@@ -20,6 +27,7 @@ This document describes the Proposals API used by the SPA. It covers scoping, qu
   - PATCH `/api/proposals/{id}/`
   - Body (partial): `{ "content": { ... } }`
   - Updates the JSONB content and refreshes `last_edited` timestamp.
+  - Section diffing (`SectionDiff` in SPA) displays previous vs draft text client-side; server stores the canonical current content only.
 - Delete/archive
   - DELETE `/api/proposals/{id}/` (consider soft-archive by setting `state: archived` to free up active cap).
 
@@ -36,3 +44,4 @@ Implementation notes
 - Proposal content is stored as JSONB. Keep a `schema_version` field for forward compatibility.
 - Prefer PATCH for frequent autosaves; send minimal deltas when possible.
 - RLS is enforced at the DB level; always include the correct scope header so policies and quotas evaluate correctly.
+- AI formatting/final pass: after all sections approved, the SPA may call `/api/ai/format` to produce a polished variant for export; underlying export still consumes stored JSONB.

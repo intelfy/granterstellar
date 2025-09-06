@@ -1,4 +1,7 @@
 services:
+  # Full development stack (API + Postgres + Redis + SPA dev server + workers + backups).
+  # Not used for production deployment; production builds a single API image (api/Dockerfile)
+  # that already bundles the SPA build and landing assets.
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -57,7 +60,7 @@ services:
     volumes:
       - .:/app
     ports:
-  - "5173:5173"
+      - "5173:5173"
     depends_on:
       - api
 

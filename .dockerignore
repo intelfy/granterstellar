@@ -2,6 +2,26 @@
 .git
 .gitignore
 
+# Documentation & markdown (shrink context)
+**/*.md
+docs/
+
+# Tests (any location)
+**/tests/**
+**/__tests__/**
+
+# Source maps & coverage artifacts
+**/*.map
+coverage/
+coverage.*
+.coverage
+htmlcov/
+
+# Caches
+.ruff_cache/
+.pytest_cache/
+web/.vite/
+
 # Node
 node_modules
 web/node_modules
@@ -26,3 +46,8 @@ __pycache__
 
 # Logs
 *.log
+
+# Virtual environments / local tooling
+.venv/
+venv/
+pip-wheel-metadata/

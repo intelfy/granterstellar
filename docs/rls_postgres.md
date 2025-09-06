@@ -1,3 +1,10 @@
+[[AI_CONFIG]]
+FILE_TYPE: 'POSTGRES_RLS_POLICY_GUIDE'
+INTENDED_READER: 'AI_AGENT'
+PURPOSE: ['Explain Postgres RLS setup', 'Guide least-privileged DB user creation', 'Ensure secure RLS enforcement']
+PRIORITY: 'HIGH'
+[[/AI_CONFIG]]
+
 # Postgres RLS guide (least-privileged setup)
 
 This app enforces Row-Level Security (RLS) using Postgres GUCs set by `accounts.middleware.RLSSessionMiddleware`. Policies live in `db_policies/migrations/0001_rls.py` (+ fixes in 0002).

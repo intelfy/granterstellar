@@ -16,8 +16,12 @@ def perform_export(job_id: int):
     checksum = ''
     if job.format == 'md':
         data = md.encode('utf-8')
-        import hashlib
-        checksum = hashlib.sha256(data).hexdigest()
+        try:
+            from app.common.files import compute_checksum
+            checksum = compute_checksum(data).hex
+        except Exception:
+            import hashlib as _hl
+            checksum = _hl.sha256(data).hexdigest()
         ext = 'md'
     elif job.format == 'pdf':
         data, checksum = render_pdf_from_text(md)

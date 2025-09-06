@@ -1,3 +1,11 @@
+[[AI_CONFIG]]
+FILE_TYPE: 'TASK_LIST'
+IS_SINGLE_SOURCE_OF_TRUTH: 'TRUE_EXCEPT_DEFER_TO_COPILOT-INSTRUCTIONS'
+INTENDED_READER: 'AI_AGENT'
+PURPOSE: ['Outline current priorities', 'Detail next steps', 'Track remaining issues', 'Guide development and ops tasks']
+PRIORITY: 'CRITICAL'
+[[/AI_CONFIG]]
+
 # Granterstellar — Engineering Plan (updated 2025-09-01)
 
 Source of truth for product/architecture: `.github/copilot-instructions.md` and `docs/README.md` (install/security/ops details in `docs/*`). This file tracks current priorities and gaps only.
@@ -204,6 +212,101 @@ Backend/API
 - [ ] Proposals: versioning metadata on PATCH
 - Prompt shield: [ ] central prompts + basic injection screening
 
+Dependency & Supply Chain
+
+- [ ] Add Python constraints/lock (pip-tools compile → requirements.txt + constraints.txt)
+- [ ] Commit npm lockfile and enforce `npm ci` (update Docker build)
+- [ ] CI: add pip-audit & npm audit (prod deps) failing on HIGH/CRITICAL
+- [ ] Weekly automated dependency updates (Dependabot/Renovate)
+- [ ] Generate SBOM (CycloneDX) for Python & JS in CI and archive artifact
+- [ ] Document dependency triage workflow in `docs/ops_runbook.md`
+
+API Hardening & Auth
+
+- [ ] Scoped throttle for login (`throttle_scope="login"`) + test brute-force attempts
+- [ ] Implement lockout (username+ip) after configurable failed attempts (exponential backoff)
+- [ ] Remove SessionAuthentication from DRF defaults (retain for admin only)
+- [ ] Explicit AllowAny only on public endpoints; audit others (add test)
+- [ ] Startup environment validation (critical vars) fail-fast when DEBUG=0
+- [ ] Add DRF pagination defaults (DEFAULT_PAGINATION_CLASS, PAGE_SIZE) and adjust list views
+
+Structured Logging & Observability
+
+- [ ] Request ID middleware + log propagation
+- [ ] Introduce structured JSON logs (structlog or stdlib formatter) with core fields
+- [ ] Timing middleware emits duration_ms field
+- [ ] Redact PII (emails, tokens) from logs; add test
+- [ ] Upload rejection log includes reason + request_id (test)
+
+Exports & Integrity
+
+- [ ] Guard: abort export if generated artifact exceeds size/page thresholds
+- [ ] Add checksum verification endpoint or `?verify=1` to re-hash artifact
+- [ ] Store & return export size metadata
+- [ ] Cleanup task for stale/failed export jobs
+
+AI Providers (additional)
+
+- [ ] Per-provider timeout & retry (circuit breaker counters)
+- [ ] Token usage accounting scaffold
+- [ ] Prompt redaction layer (strip PII) before logging
+
+RLS & Roles Model
+
+- [ ] Replace `is_staff` role inference with explicit user/org role resolver
+- [ ] Extend role matrix (OWNER, ADMIN, MEMBER) – migration plan with backward compat
+- [ ] Tests ensuring staff flag alone does not elevate RLS access
+
+Data & Privacy
+
+- [ ] PII classification document (fields, retention) added to docs
+- [ ] Implement user data export & delete endpoints + tests
+- [ ] Redact user identifiers in structured logs (configurable override in DEBUG)
+- [ ] Add backup encryption guidance (GPG/KMS) to `security_hardening.md`
+
+Performance / Caching (API additions)
+
+- [ ] ETag/Last-Modified headers for proposal detail (hash of updated_at)
+- [ ] Validate gzip/br served (integration test) via reverse proxy or middleware
+- [ ] Bootstrap aggregate endpoint (account+orgs+usage) cached short-term
+
+Testing Enhancements (supplemental)
+
+- [ ] Security headers test (DEBUG=0) asserting CSP/HSTS/COOP/CORP
+- [ ] Throttle & lockout tests (login, file upload)
+- [ ] Pagination test ensures default page size & navigation keys
+- [ ] Export checksum stability test (md/pdf/docx)
+- [ ] RLS negative test for cross-org leakage attempt
+
+Container & Build
+
+- [ ] Parameterize gunicorn workers (`WEB_CONCURRENCY`)
+- [ ] Set reproducible build env (`PYTHONHASHSEED=0`) in Dockerfile
+- [ ] Extend STRIP_PY test to cover new modules added
+- [ ] Multi-arch build documentation
+
+Accessibility & i18n (extensions)
+
+- [ ] Add vitest + axe-core scans for key routes
+- [ ] Introduce `web/src/locales/en/messages.json` scaffold
+- [ ] Track UI string externalization progress metric
+
+Housekeeping
+
+- [ ] Add CODEOWNERS (billing/, db_policies/, middleware, ai/)
+- [ ] Update CONTRIBUTING with dependency/security update cadence
+- [ ] Add `scripts/env_doctor.py` (invoked pre-test in CI)
+- [ ] Optional Makefile with standard targets (lint, test, build, doctor)
+
+Security Hardening (new audit additions)
+
+- [ ] DRF: enforce authenticated default permission (remove DEBUG AllowAny fallback); explicit AllowAny only per public view
+- [ ] Startup assertion: abort if DEBUG=1 and non-local host in `ALLOWED_HOSTS`
+- [ ] JWT: require distinct `JWT_SIGNING_KEY` in production (error if identical to SECRET_KEY)
+- [ ] CSP reporting: add `CSP_REPORT_URI` + `CSP_REPORT_ONLY` envs; implement report-only mode toggle
+- [ ] Virus scan command tests (invalid chars, disallowed binary, timeout) ensuring fail-closed behavior
+- [ ] Add safeguard for large OCR durations (timing + warn log > threshold)
+
 Exports
 
 - [ ] Asset embedding (images/diagrams) with stable paths
@@ -211,7 +314,17 @@ Exports
 Frontend (SPA)
 
 - [ ] Integrate SurveyJS for authoring
-- [ ] Extract user-facing copy into keys file (prep for styling/i18n)
+
+Accessibility & i18n
+
+- [ ] Extract user-facing copy into keys store (prep for styling/i18n)
+- [ ] Automated accessibility baseline (jest-axe / axe-core) for key routes (dashboard, proposal editor, billing, uploads)
+- [ ] Add accessibility checklist section to `docs/design_system.md` (focus states, landmarks, aria labels, color contrast)
+- [ ] Backend: introduce gettext extraction script + initial `locale` directory scaffolding
+- [ ] SPA: add i18n scaffolding (e.g., react-intl or lightweight translation layer) and replace hard-coded strings path-by-path
+- [ ] Add vitest + axe-core scans for key routes
+- [ ] Introduce `web/src/locales/en/messages.json` scaffold
+- [ ] Track UI string externalization progress metric
 
 Proxy/Networking
 
@@ -219,7 +332,25 @@ Proxy/Networking
 
 Operations & Security
 
-- [ ] Data retention/privacy pass; update privacy page
+- [ ] Basic metrics: request latency, AI invocation duration, Celery task success/fail counts (expose /metrics if/when Prometheus planned)
+
+Maintainability & Refactors
+
+- [ ] Split monolithic `settings.py` into logical modules (security, storage, billing) or adopt split-settings (incremental)
+- [ ] Extract billing webhook helpers into `billing/services.py` with dedicated unit tests (idempotency + discount + bundle credits)
+- [ ] Centralize file security helpers (`_is_under_media_root`, signature checks) in a shared util module + tests
+
+Test Coverage Additions
+
+- [ ] Test: production DRF default permission remains IsAuthenticated
+- [ ] Test: CSP header forbids inline styles unless `CSP_ALLOW_INLINE_STYLES=1`
+- [ ] Test: webhook signature required when DEBUG=0 (invalid signature → 400)
+- [ ] Test: virus scanner invalid command returns `scan_error`
+- [ ] Test: file upload throttle (after implementing) returns 429 on rapid bursts
+- [ ] Test: JWT_SIGNING_KEY enforcement (prod simulation)
+- [ ] Test: structured logging emits expected keys for upload rejection
+- [ ] Test: OCR large file skipped when size > TEXT_EXTRACTION_MAX_BYTES
+- [ ] Test: add i18n extraction smoke (no duplicate msgids) once scaffolding added
 
 ## Notes
 

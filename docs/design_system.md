@@ -1,4 +1,13 @@
+[[AI_CONFIG]]
+FILE_TYPE: 'BACKEND_DEV_STYLE_POLICY'
+INTENDED_READER: 'AI_AGENT'
+PURPOSE: ['Limit styling applied before backend is complete', 'Establish minimal design system policy', 'Ensure maintainable and semantic UI code']
+PRIORITY: 'LOW'
+[[/AI_CONFIG]]
+
 # Design system (minimal policy; full DS TBD)
+
+Precedence note: Higher-level product/engineering directives live in `.github/copilot-instructions.md` and `Todo.md`. If this document conflicts with them, update this file to align (do not silently diverge).
 
 This replaces the older UI overhaul checklist. Use this as the single source of truth for UI rules until a full design system ships.
 
@@ -24,7 +33,12 @@ Contribution rules (until DS is in place)
 - Keep components functional and focused on behavior and data.
 - Prefer semantic HTML elements and minimal attributes.
 - If a view needs temporary clarity for debugging, add plain text or minimal structure only.
-- Keep `docs/style-docs.md` up-to-date when adding new UI elements or test selectors (ids/classes/testids/aria). If you introduce any new classes for styling, document them there.
+- Keep `frontend_design_bible.md` (and the alias `style-docs.md`) up-to-date when adding new UI elements or test selectors (ids/classes/testids/aria). If you introduce any new classes for styling, document them there.
+
+- Router base `/app` (`VITE_ROUTER_BASE`); asset base `/static/app/` (`VITE_BASE_URL`).
+- Dev-only UI experiments via `VITE_UI_EXPERIMENTS`. Umami optional via `VITE_UMAMI_*`.
+- Tests (Vitest/jsdom) rely on test-mode guards; avoid direct `location` changes in unit tests. Use `data-testid="promo-banner"` for the discounts banner to avoid ambiguous text queries; ensure `afterEach(cleanup)` is applied in suites rendering the billing view.
+	- Maintain `docs/style-docs.md` as the canonical selector map for UI elements (ids/classes/testids/aria). When adding or changing UI, update that doc so styling can be applied later. Capture banners, error containers, and any dynamic content indicators there.
 
 Decision log (to be filled in)
 
