@@ -34,3 +34,12 @@ htmlcov/
 
 # Node build cache (Vite)
 web/.vite/
+
+# Python bytecode & cache dirs
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignore stray Python build artifacts
+*.pyo
+*.pyd
