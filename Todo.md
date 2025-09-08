@@ -52,12 +52,7 @@ Legend: [ ] todo, [~] in progress, [x] done
 These clarify that USERS NEVER SUPPLY PROMPTS DIRECTLY — backend owns role-specific prompt engineering.
 
 - [x] Prompt Template System (High) — Implemented via `AIPromptTemplate` (name, version, variables, checksum auto-recomputed). Snapshots stored on `AIJobContext` (`rendered_prompt_redacted`, `prompt_version`, `template_sha256`).  
-- [ ] Role-Specific Prompt Contracts (High) — Define strict input schema per role:  
-  - Planner receives ONLY `{grant_url, grant_call_text?, org_profile}` and must output JSON schema: `{schema_version, sections:[{id,title,questions:[...] }]}`.  
-  - Writer receives `{section_id, section_title, answers, approved_section_summaries[], memory[], retrieval_snippets[], file_refs[]}` and produces plain markdown draft text only.  
-  - Reviser receives `{base_text, change_request, memory[], retrieval_snippets[], file_refs[]}` and returns revised text + structured diff object.  
-  - Formatter receives `{full_text, template_hint?, style_guidelines?, assets?, file_refs[]}` and returns formatted markdown canonical form (later rendered to PDF/DOCX).  
-  Add validation: reject provider output if schema mismatch (fail early with clear error).  
+- [x] Role-Specific Prompt Contracts (High) — Defined & enforced. Validators in `ai/validators.py`; integrated in `gpt5.py` & `gemini.py` (planner/write/revise/format). Writer rejects JSON-shaped drafts; reviser returns stub diff structure (to be replaced by semantic diff); formatter enforces `formatted_markdown` key. Follow-ups listed below.
 - [x] AIJobContext / Prompt Audit (High) — Implemented: fields present (`template_sha256`, `redaction_map`, `model_params`, `snippet_ids`, `retrieval_metrics`). Deterministic redaction taxonomy + mapping persisted.  
 - [ ] RAG Data Models (High) — Create `AIResource` (template|sample|call_snapshot), `AIChunk` (resource_fk, ord, text, embedding_key/vector, token_len, metadata: {section_hint, license, source_url, type}), migration + admin.  
 - [ ] Embedding Service (High) — Integrate MiniLM-L6-v2 (sentence-transformers). Abstraction `EmbeddingService` with pluggable backend (dev: FAISS in tmp dir; prod: Mongo Atlas vector index). Provide `embed(texts) -> List[Vector]` + health check.  
@@ -85,6 +80,9 @@ These clarify that USERS NEVER SUPPLY PROMPTS DIRECTLY — backend owns role-spe
 
 - [ ] Test: planner schema validation rejects malformed provider JSON.
 - [ ] Test: writer rejects output containing JSON or non-markdown gating markers.
+  - [ ] Test: reviser missing diff keys raises SchemaError.
+  - [ ] Test: formatter missing formatted_markdown raises SchemaError.
+  - [ ] Test: composite provider propagates SchemaError without masking.
 - [ ] Test: diff engine returns added/removed counts > 0 when change_request supplied.
 - [ ] Test: quota denial when cap reached before new section write.
 - [ ] Test: prompt audit row created & redacted fields masked.
@@ -287,6 +285,9 @@ These clarify that USERS NEVER SUPPLY PROMPTS DIRECTLY — backend owns role-spe
 - [ ] Admin UI: view original vs redacted prompt snapshot + category legend.
 - [ ] Blueprint schema lint (ensure stable ordering, max size guard) in CI.
 - [ ] Optional: redact_map diff tool if taxonomy expands.
+- [ ] Centralize validation via decorator / wrapper (reduce duplication & enable metrics around failures).
+- [ ] Auto-repair attempt for trivial planner issues (e.g., empty sections => deterministic fallback) before failing.
+- [ ] Replace reviser stub diff with semantic diff engine output and tighten validator.
 
 Database
 
