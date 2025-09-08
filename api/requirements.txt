@@ -8,7 +8,7 @@ python-dotenv==1.0.1
 celery==5.4.0
 redis==5.0.7
 dj-database-url==2.2.0
-stripe==10.6.0
+stripe==12.5.1
 PyJWT==2.9.0
 djangorestframework-simplejwt==5.5.1
 reportlab==4.2.2
