@@ -22,9 +22,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Tightened RLS policies replacing broad FOR ALL proposal write with granular admin-gated set; member subscription read-only policy.
 - Documentation updates (`docs/rls_postgres.md`, `docs/security_hardening.md`) reflecting org-only proposals & subscription visibility.
 - Backfill logic migrates legacy personal proposals into per-user synthetic orgs before NOT NULL enforcement.
+- Section promotion API endpoint: `POST /api/sections/{id}/promote` (locks section, copies draft_content → content) and unlock via `DELETE /api/sections/{id}/promote`.
+- AIMetric instrumentation for `promote` events (type `promote`) recording proposal & section context for lifecycle analytics.
+- Prompt blueprint system: optional `blueprint_schema` + `blueprint_instructions` appended only for formatter role, enabling structured output guidance.
+- Deterministic multi-category redaction (EMAIL, NUMBER, PHONE, ID_CODE, SIMPLE_NAME, ADDRESS_LINE) with hashed tokens `[CATEGORY_<hash>]` and persisted `redaction_map` for audit.
+- Template drift detection via stored `template_sha256` in `AIJobContext` and `detect_template_drift` helper.
 
 ### Changed
 
+- Prompt contracts doc expanded with blueprint injection, deterministic redaction taxonomy, and drift detection workflow.
 - README cleanup: removed duplicate AI bullet, normalized indentation (tabs → spaces) for markdown lint compliance.
 - Consolidated security documentation references; clarified CSP env-driven allow-list approach.
 

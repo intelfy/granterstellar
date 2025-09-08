@@ -34,3 +34,33 @@ class Proposal(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover
         return f"Proposal {self.pk} ({self.state})"
+
+
+class ProposalSection(models.Model):
+    """Structured section of a Proposal for granular AI workflows.
+
+    Granularity: Each logical prompt target (e.g., 'impact', 'budget') becomes a
+    section enabling independent planning/writing/revision cycles and metrics.
+    """
+    proposal = models.ForeignKey(Proposal, on_delete=models.CASCADE, related_name="sections")
+    key = models.CharField(max_length=128, db_index=True)
+    title = models.CharField(max_length=256, blank=True, default="")
+    order = models.PositiveIntegerField(default=0)
+    content = models.TextField(blank=True, default="")  # latest accepted text
+    draft_content = models.TextField(blank=True, default="")  # in-progress edits
+    metadata = models.JSONField(default=dict, blank=True)
+    locked = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("proposal", "key")
+        ordering = ["proposal_id", "order", "id"]
+        indexes = [
+            models.Index(fields=["proposal", "key"], name="proposal_section_key_idx"),
+            models.Index(fields=["proposal", "order"], name="proposal_section_order_idx"),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover
+        pid = getattr(self.proposal, 'id', 'unsaved')
+        return f"ProposalSection {pid}:{self.key}"

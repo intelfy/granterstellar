@@ -10,6 +10,9 @@ from billing.permissions import CanCreateProposal
 from orgs.models import Organization
 from .models import Proposal
 from .serializers import ProposalSerializer
+from ai.section_pipeline import promote_section, get_section
+from ai.models import AIMetric
+from rest_framework.views import APIView
 from billing.quota import can_unarchive
 from orgs.models import OrgUser
 
@@ -123,3 +126,60 @@ class ProposalViewSet(viewsets.ModelViewSet):
             update_fields.append("updated_at")
         instance.save(update_fields=update_fields)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SectionPromotionView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request: Request, section_id: str):  # promote
+        section = get_section(section_id)
+        if not section:
+            return Response({"error": "not_found"}, status=404)
+        # Simple ownership/membership enforcement mirroring Proposal scoping
+        user = request.user
+        proposal = section.proposal
+        org_id_val = getattr(proposal, 'org_id', None)
+        if org_id_val:
+            is_member = OrgUser.objects.filter(org_id=org_id_val, user_id=user.id).exists()
+            if not is_member:
+                return Response({"error": "forbidden"}, status=403)
+        else:
+            if getattr(proposal, 'author_id', None) != user.id:
+                return Response({"error": "forbidden"}, status=403)
+        if section.locked:
+            return Response({"error": "already_locked"}, status=409)
+        promote_section(section)
+        # Record promotion metric (lightweight observability of lifecycle transitions)
+        try:  # best-effort; failures shouldn't block response
+            AIMetric.objects.create(  # type: ignore[arg-type]
+                type="promote",
+                model_id="lifecycle",
+                proposal_id=getattr(section.proposal, 'id', None),
+                section_id=str(getattr(section, 'id', '')),
+                duration_ms=0,
+                tokens_used=0,
+                success=True,
+                created_by=request.user if getattr(request.user, 'is_authenticated', False) else None,
+                org_id=str(getattr(section.proposal, 'org_id', '') or ''),
+            )
+        except Exception:  # pragma: no cover - defensive
+            pass
+        return Response({"status": "promoted", "section_id": section_id})
+
+    def delete(self, request: Request, section_id: str):  # unlock
+        section = get_section(section_id)
+        if not section:
+            return Response(status=404)
+        user = request.user
+        proposal = section.proposal
+        org_id_val = getattr(proposal, 'org_id', None)
+        if org_id_val:
+            is_member = OrgUser.objects.filter(org_id=org_id_val, user_id=user.id).exists()
+            if not is_member:
+                return Response({"error": "forbidden"}, status=403)
+        else:
+            if getattr(proposal, 'author_id', None) != user.id:
+                return Response({"error": "forbidden"}, status=403)
+        section.locked = False
+        section.save(update_fields=["locked", "updated_at"])
+        return Response({"status": "unlocked", "section_id": section_id})

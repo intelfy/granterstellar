@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 
 from orgs.models import Organization, OrgUser
 from proposals.models import Proposal
-from billing.models import Subscription  # retained for potential future expansion (currently not used)
+# Subscription model intentionally not imported; focused RLS tests avoid coupling to billing.
 
 
 def set_guc(user_id=None, org_id=None, role="user"):

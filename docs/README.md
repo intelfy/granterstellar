@@ -17,6 +17,7 @@ Active docs
 - Exports async/Celery: `docs/exports_async.md`
 - Deterministic export contract: `docs/deterministic_exports.md`
 - AI rate limiting & gating: `docs/ai_rate_limiting.md`
+- Prompt contracts & rendering: `docs/prompt_contracts.md`
 - Proposals model/endpoints and autosave: `docs/proposals.md`
 - Postgres RLS policies and least-privileged DB user: `docs/rls_postgres.md`
 	- Matrix test coverage file: `db_policies/tests/test_rls_matrix.py` (CRUD + negative membership insert focus)

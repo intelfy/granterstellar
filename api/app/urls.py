@@ -14,6 +14,7 @@ from billing.views import usage, customer_portal, checkout, cancel_subscription,
 from billing.webhooks import stripe_webhook
 from rest_framework.routers import DefaultRouter
 from proposals.views import ProposalViewSet
+from proposals.views import SectionPromotionView
 from orgs.views import OrganizationViewSet, OrgInviteAcceptView
 from ai import views as ai_views
 from exports import views as export_views
@@ -118,6 +119,8 @@ urlpatterns = [
     path('api/ai/metrics/recent', ai_views.metrics_recent),
     path('api/ai/metrics/summary', ai_views.metrics_summary),
     path('api/ai/memory/suggestions', ai_views.memory_suggestions),
+    # Section promotion (lock/unlock)
+    path('api/sections/<str:section_id>/promote', SectionPromotionView.as_view()),
     # Org invites
     path('api/orgs/invites/accept', OrgInviteAcceptView.as_view({'post': 'create'})),
     # Proposals API

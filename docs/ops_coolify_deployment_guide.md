@@ -44,6 +44,149 @@ Key concepts (keep these defaults)
 - Invite acceptance: SPA surfaces a global invite banner when an invite token is in the URL (selectors in docs/style-docs.md).
  - Distinct JWT signing key: set `JWT_SIGNING_KEY` different from `SECRET_KEY` (enforced by forthcoming doctor script) to allow rotation without invalidating Django internals.
 
+## 🔑 Environment Variable Matrix (Authoritative Reference)
+
+Each variable below lists: Type = secret | config | toggle | security | pricing | quota | ai | email | oauth | build | ops. Required: Y means production hard requirement; C = conditional (see notes); blank = optional.
+
+| Name | Purpose | Type | Required | Default | Notes |
+|------|---------|------|----------|---------|-------|
+| SECRET_KEY | Django cryptographic signing | secret | Y | (none) | Must be long & random. Fails hard if debug off & left default. |
+| DEBUG | Enable debug features | toggle |  | 0 | Set 1 only in non-prod. Disables certain security enforcement. |
+| ALLOWED_HOSTS | Host allow-list | security | Y | localhost,127.0.0.1 | No `*` in prod. Comma separated. Includes testserver auto in DEBUG/tests. |
+| PUBLIC_BASE_URL | Absolute external base URL | config | Y |  | Used for emails, redirects, Stripe return URLs. Must be https in prod. |
+| DATABASE_URL | Primary database connection | secret | Y | sqlite:///... | Use Postgres in prod; RLS only on Postgres. |
+| REDIS_URL | Redis broker/result backend | config | C |  | Required when EXPORTS_ASYNC=1 or AI_ASYNC=1 or any Celery worker. |
+| CORS_ALLOW_ALL | Allow all origins | security |  | 0 | Must be 0 in prod or startup will raise. |
+| CORS_ALLOWED_ORIGINS | Explicit allowed origins | security | C |  | Required in prod when CORS_ALLOW_ALL=0 and browser calls come from another origin. Full scheme. |
+| CSRF_TRUSTED_ORIGINS | Trusted origins for CSRF | security | C |  | Set when using secure cookies across domains or different hostnames. |
+| VITE_BASE_URL | SPA assets base path | build | Y | /static/app/ | Keep in sync with Dockerfile copy path. |
+| VITE_API_BASE | SPA API prefix | build | Y | /api | If reverse proxy rewrites, adjust accordingly. |
+| VITE_ROUTER_BASE | SPA router base | build | Y | /app | Changing requires rebuild & matching Nginx/Traefik rules. |
+| VITE_UMAMI_WEBSITE_ID | Analytics site id | config |  |  | Provide with VITE_UMAMI_SRC & CSP allow-list. |
+| VITE_UMAMI_SRC | Analytics script URL | config |  |  | Must pass CSP validation; add to CSP_SCRIPT_SRC & CSP_CONNECT_SRC. |
+| VITE_UI_EXPERIMENTS | Enable UI experiment flags | toggle |  | 0 | Reserved for future feature gating. |
+| VITE_WEB_VITALS | Emit Web Vitals | toggle |  | 0 | When 1, sends vitals to analytics endpoint if configured. |
+| CSP_SCRIPT_SRC | Extra script sources | security |  |  | Comma list; 'self' auto. |
+| CSP_STYLE_SRC | Extra style sources | security |  |  | Avoid inline style usage. |
+| CSP_CONNECT_SRC | Extra connect (XHR/WebSocket) sources | security |  |  | Needed for analytics collectors, external APIs from browser. |
+| CSP_ALLOW_INLINE_STYLES | Allow unsafe-inline styles | security |  | 0 | Temporary only; prefer 0. |
+| APP_HOSTS | Hosts that redirect / → /app | config |  |  | Comma list; controls landing vs SPA root. |
+| EXPORTS_ASYNC | Offload export generation to Celery | toggle |  | 0 | Requires REDIS_URL & worker. |
+| AI_ASYNC | Offload AI jobs to Celery | toggle |  | 0 | Requires REDIS_URL & worker. Returns job_id for polling. |
+| CELERY_BROKER_URL | Explicit Celery broker override | config |  |  | Normally use REDIS_URL; optional direct override. |
+| CELERY_RESULT_BACKEND | Explicit Celery backend override | config |  |  | Normally use REDIS_URL. |
+| CELERY_TASK_ALWAYS_EAGER | Run tasks inline (testing) | toggle |  | 0 | Overrides async behavior for test/local runs. |
+| JWT_ACCESS_MINUTES | Access token lifetime | security |  | 30 | Shorten for higher security; impacts client refresh cadence. |
+| JWT_REFRESH_DAYS | Refresh token lifetime | security |  | 7 | Longer rotation window. |
+| JWT_SIGNING_KEY | JWT signature secret | secret | C | SECRET_KEY | Strongly recommended distinct from SECRET_KEY; required for key rotation strategy. |
+| DRF_THROTTLE_USER | User rate throttle | security |  | 100/min | DRF format `<n>/<period>`. |
+| DRF_THROTTLE_ANON | Anonymous throttle | security |  | 20/min | Tune for abuse mitigation. |
+| DRF_THROTTLE_LOGIN | Login endpoint throttle | security |  | 10/min | Scoped throttle (brute force protection). |
+| FILE_UPLOAD_MAX_BYTES | Hard upload cap | config |  | 10485760 | 10MB default; enforce 413 on exceed. |
+| FILE_UPLOAD_MAX_MEMORY_SIZE | Django in‑memory threshold | config |  | 10485760 | Also fallback for cap if FILE_UPLOAD_MAX_BYTES unset. |
+| TEXT_EXTRACTION_MAX_BYTES | OCR/text extraction cap | config |  | 8388608 | Skip extraction above this size. |
+| ALLOWED_UPLOAD_EXTENSIONS | Allowed extensions list | security |  | pdf,png,jpg,jpeg,docx,txt | Lowercase comma list. Signatures also validated. |
+| OCR_IMAGE | Enable OCR for images | toggle |  | 0 | Future hook (tesseract). |
+| OCR_PDF | Enable OCR for PDFs | toggle |  | 0 | Future hook. |
+| VIRUSSCAN_CMD | Antivirus scan command | security |  |  | Template may include {path}. Non‑zero exit => reject. |
+| VIRUSSCAN_TIMEOUT_SECONDS | Scan timeout seconds | security |  | 10 | Fail closed on timeout. |
+| QUOTA_FREE_ACTIVE_CAP | Active proposals cap (free) | quota |  | 1 | On exceed returns 402 with X-Quota-Reason. |
+| QUOTA_PRO_MONTHLY_CAP | Monthly proposals cap (pro) | quota |  | 20 | Soft enforced via 402. |
+| QUOTA_PRO_PER_SEAT | Additional per-seat monthly quota | quota |  | 10 | Added to org total per paid seat. |
+| QUOTA_ENTERPRISE_MONTHLY_CAP | Monthly cap (enterprise) | quota |  | (unset) | Empty/None = unlimited. |
+| FAILED_PAYMENT_GRACE_DAYS | Past due grace window | billing |  | 3 | Past_due treated active within window. |
+| INVITE_SENDER_DOMAIN | Domain for invites@ | email |  |  | Sets DEFAULT_FROM_EMAIL; fallback to MAILGUN_DOMAIN/no-reply. |
+| EMAIL_BACKEND | Django email backend | email |  | smtp backend | Configure for production invites. |
+| EMAIL_HOST | SMTP host | email |  |  | e.g. smtp.mailgun.org. |
+| EMAIL_PORT | SMTP port | email |  | 587 | 587 TLS / 465 SSL typically. |
+| EMAIL_HOST_USER | SMTP username | secret |  |  | Postmaster or user. |
+| EMAIL_HOST_PASSWORD | SMTP password | secret |  |  | Required to send emails. |
+| EMAIL_USE_TLS | Enable TLS | security |  | 1 | Use 1 for STARTTLS. |
+| FRONTEND_INVITE_URL_BASE | Invite accept SPA base | config |  |  | e.g. <https://app.example.com/app>. |
+| STRIPE_SECRET_KEY | Stripe API key | secret | C |  | Required for billing features; leave empty to disable billing UI flows. |
+| STRIPE_WEBHOOK_SECRET | Webhook signature key | secret | C |  | Required in prod for secure webhook processing. |
+| PRICE_PRO_MONTHLY | Stripe price id (monthly) | pricing | C |  | If unset, client must provide `price_id` on checkout in prod. |
+| PRICE_PRO_YEARLY | Stripe price id (yearly) | pricing | C |  | Same note as monthly. |
+| PRICE_ENTERPRISE_MONTHLY | (Not currently read by code) | pricing |  |  | Present in template; reserved for future enterprise billing logic. Safe to omit now. |
+| PRICE_BUNDLE_1 | 1‑credit bundle price id | pricing |  |  | Optional overage top‑ups. |
+| PRICE_BUNDLE_10 | 10‑credit bundle | pricing |  |  | Optional. |
+| PRICE_BUNDLE_25 | 25‑credit bundle | pricing |  |  | Optional. |
+| AI_PROVIDER | Active AI provider key | ai |  |  | e.g. openai, gemini, stub, composite. Empty → gating still applied but calls may fail if endpoints invoked. |
+| OPENAI_API_KEY | OpenAI credentials | secret | C |  | Required if AI_PROVIDER=openai or composite referencing openai. |
+| GEMINI_API_KEY | Gemini credentials | secret | C |  | Required if AI_PROVIDER=gemini or composite referencing gemini. |
+| AI_RATE_PER_MIN_FREE | RPM cap free tier | ai |  | 0 | 0/blank = disabled gating (in that tier). |
+| AI_RATE_PER_MIN_PRO | RPM cap pro tier | ai |  | 20 | Adjust for throughput. |
+| AI_RATE_PER_MIN_ENTERPRISE | RPM cap enterprise tier | ai |  | 60 | Higher default ceiling. |
+| AI_DAILY_REQUEST_CAP_FREE | Daily requests free | ai |  | (unset) | Unset/0 disables. |
+| AI_DAILY_REQUEST_CAP_PRO | Daily requests pro | ai |  | (unset) | Unset/0 disables. |
+| AI_DAILY_REQUEST_CAP_ENTERPRISE | Daily requests enterprise | ai |  | (unset) | Unset/0 disables. |
+| AI_MONTHLY_TOKENS_CAP_PRO | Monthly token cap pro | ai |  | (unset) | Enforced after daily; tokens aggregated per write/revise/format. |
+| AI_MONTHLY_TOKENS_CAP_ENTERPRISE | Monthly token cap enterprise | ai |  | (unset) | Same logic. |
+| AI_ENFORCE_RATE_LIMIT_DEBUG | Enforce caps in DEBUG | toggle |  | 0 | Helpful for local limit testing. |
+| AI_DETERMINISTIC_SAMPLING | Deterministic formatting | toggle |  | 1 | 1 ensures stable formatting output & export integrity. |
+| SESSION_COOKIE_SECURE | Secure session cookie | security | C | 1 (prod) | Auto 0 in DEBUG unless overridden. |
+| CSRF_COOKIE_SECURE | Secure CSRF cookie | security | C | 1 (prod) | Auto 0 in DEBUG. |
+| SECURE_SSL_REDIRECT | Force https redirect | security | C | 1 (prod) | Auto 0 in DEBUG. Traefik handles TLS externally. |
+| SECURE_HSTS_SECONDS | HSTS max-age | security | C | 31536000 (prod) | 0 in DEBUG. |
+| SECURE_HSTS_INCLUDE_SUBDOMAINS | HSTS include subdomains | security | C | 1 (prod) | 0 in DEBUG. |
+| SECURE_HSTS_PRELOAD | HSTS preload flag | security | C | 1 (prod) | 0 in DEBUG. Submit to preload list separately. |
+| SECURE_REFERRER_POLICY | Referrer policy header | security |  | strict-origin-when-cross-origin | Override only if policy needs adjustment. |
+| SESSION_COOKIE_SAMESITE | Session cookie SameSite | security |  | Lax | Adjust for cross-site needs. |
+| CSRF_COOKIE_SAMESITE | CSRF cookie SameSite | security |  | Lax | Strict may break certain flows. |
+| APP_HOSTS | SPA redirect host list | config |  |  | Duplicate of earlier row (kept for quick scan). |
+| INVITE_SENDER_DOMAIN | Domain used for invites | email |  |  | Duplicate for emphasis (see email). |
+| MAILGUN_DOMAIN | Mailgun domain (landing) | email | C |  | Only for separate landing server; influences fallback DEFAULT_FROM_EMAIL. |
+| MAILGUN_API_KEY | Mailgun API key (landing) | secret | C |  | Required for waitlist signup if landing server deployed. |
+| MAILGUN_API_HOST | Mailgun host | config |  | api.mailgun.net | Use api.eu.mailgun.net for EU region. |
+| MAILGUN_LIST | Mailgun list address | config |  |  | Waitlist subscriptions target. |
+| ENABLE_HTTPS | Enable HTTPS in landing server | toggle |  | 0 | Only when running server.mjs directly with cert paths. |
+| HTTPS_KEY_PATH | TLS key path (landing) | secret | C |  | Required with ENABLE_HTTPS=1. |
+| HTTPS_CERT_PATH | TLS cert path (landing) | secret | C |  | Required with ENABLE_HTTPS=1. |
+| ALLOW_HTTP_IN_PROD | Allow plain HTTP landing | toggle |  | 0 | Only behind reverse proxy TLS termination. |
+| STATIC_FS_CONCURRENCY | Landing static read concurrency | ops |  | 50 | Tune for I/O. |
+| STATIC_RATE_LIMIT_MAX | Landing rate limit window | ops |  | 300 | Per-IP per 5m. |
+| RETAIN_DAYS | Media backup retention | ops |  | 30 | Used by media_backup.sh script. |
+| STRIP_PY | Strip Python sources at build | build |  | (unset) | Build arg (not runtime env) enable for smaller/less readable image. |
+
+Legend: C (Conditional) means required only when enabling the related feature (e.g., Stripe, Celery, OAuth, AI provider). Duplicate rows intentionally appear for quick scanning categories.
+
+Missing in code note: `PRICE_ENTERPRISE_MONTHLY` is included for forward compatibility but is not referenced by the current backend. Safe to omit until enterprise billing logic is implemented.
+
+Security startup invariants (production):
+
+- SECRET_KEY must not be default.
+- ALLOWED_HOSTS must not contain `*`.
+- CORS_ALLOW_ALL must be 0.
+
+If violated, the app raises at startup (fail-fast).
+
+Operational recommendation: implement an "env doctor" management command that checks (a) conditional groups consistency (e.g., if any STRIPE price set then STRIPE_SECRET_KEY present, webhook secret in prod), (b) JWT_SIGNING_KEY != SECRET_KEY, (c) required AI provider keys. (Planned in backlog.)
+
+### Health & Readiness
+
+| Endpoint | Use | Notes |
+|----------|-----|-------|
+| /healthz | Liveness | Lightweight plain text OK response. |
+| /api/healthz | JSON health | Mirrors /healthz with JSON envelope; safe for monitoring. |
+
+### Worker & Scaling Guidance
+
+- Single web process (gunicorn via Django runserver in current image). Scale horizontally by adding more app containers in Coolify; ensure sticky sessions if you later rely on session auth (JWT is stateless so not required).
+- Celery workers: start 1–2 initially. Command: `celery -A app.celery:app worker -l info`. For CPU bound AI tasks consider concurrency = cores.
+- Memory sizing: allow ~150MB base + (model/provider call buffers) for each web container; workers additional depending on concurrent jobs.
+- Async enabling: set EXPORTS_ASYNC=1 / AI_ASYNC=1 only after worker deployed and REDIS_URL configured.
+
+### Stripe Configuration Integrity
+
+Minimal billing enablement in production requires: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, at least one of PRICE_PRO_MONTHLY or requirement that client supplies price_id. Missing webhook secret => 400 on webhook events.
+
+### AI Provider Configuration Integrity
+
+If AI_PROVIDER is set but corresponding API key missing, requests will fail; gating still enforced. For composite strategies ensure both OPENAI_API_KEY and GEMINI_API_KEY as required by provider implementation.
+
+---
+
+
 Step 1 — Create PostgreSQL in Coolify
 
 1) New Resource → Application → pick a PostgreSQL 16 template.

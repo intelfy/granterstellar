@@ -30,17 +30,26 @@ This document describes the Proposals API used by the SPA. It covers scoping, qu
   - Section diffing (`SectionDiff` in SPA) displays previous vs draft text client-side; server stores the canonical current content only.
 - Delete/archive
   - DELETE `/api/proposals/{id}/` (consider soft-archive by setting `state: archived` to free up active cap).
+- Section promotion (lifecycle)
+  - POST `/api/sections/{id}/promote` — Copies `draft_content` → `content` and sets `locked=true` preventing further write/revise jobs until unlocked.
+  - DELETE `/api/sections/{id}/promote` — Unlocks the section (`locked=false`) allowing additional AI write/revise operations.
+  - Emits AIMetric record with `type: "promote"`, `proposal_id`, `section_id` for observability.
+  - Authorization: user must be proposal author in personal scope or an org member (RLS + view check). Non-members receive 403 `{"error":"forbidden"}`.
+  - Clients should ensure any pending draft edits are flushed to `draft_content` prior to promotion to avoid losing unsaved changes.
 
 Implementation notes
+
 - Serializer/ViewSet: see `api/proposals/serializers.py` and `api/proposals/views.py`.
 - Quota service: `api/billing/quota.py`; usage: `GET /api/usage`.
 
 ## Quotas and usage
+
 - Check current limits and usage with `GET /api/usage` (optional `X-Org-ID`).
 - Free: `active_cap` proposals (defaults to 1) in personal or org scope.
 - Pro/Enterprise: `monthly_cap` proposals created per calendar month (configurable via env).
 
 ## Notes
+
 - Proposal content is stored as JSONB. Keep a `schema_version` field for forward compatibility.
 - Prefer PATCH for frequent autosaves; send minimal deltas when possible.
 - RLS is enforced at the DB level; always include the correct scope header so policies and quotas evaluate correctly.
