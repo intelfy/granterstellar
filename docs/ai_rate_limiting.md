@@ -36,30 +36,75 @@ This document describes how AI feature access is gated and rate limited.
 
 ## Implementation Overview
 
-File: `api/ai/views.py`
+Primary modules:
 
-Key helpers:
+- `api/ai/decorators.py` — houses `ai_protected`, a decorator that centralizes plan gating, single‑write debug guard, and rate limiting before delegating to the wrapped view.
+- `api/ai/views.py` — endpoint bodies (plan / write / revise / format) and the `_rate_limit_check` helper plus metric creation.
 
-- `_rate_limit_check(request, endpoint_type)` — per-minute, tier-derived cap using recent `AIMetric` rows.
-- Inline single-write guard inside `write` — uses Django cache to mark first write per user for 60s when debug guard active.
+Key helpers & flow (simplified):
 
-Metric recording model: `AIMetric` captures `type`, `model_id`, `duration_ms`, `tokens_used`, and success status for observability.
+1. Request enters decorated endpoint (`@ai_protected(endpoint_type="write")`).
+2. Decorator performs (in order):
+    - Auth / anonymous debug bypass (`DEBUG` or `AI_TEST_OPEN`).
+    - Plan gating (reject Free tier outside bypass modes).
+    - Single‑write debug guard (optional deterministic 429 path).
+    - Rate limit fast path (cache bucket precheck) then authoritative DB count.
+3. If allowed, control passes to original view which triggers provider logic (sync or async job) and records an `AIMetric` row.
+
+Metric model: `AIMetric` stores `type`, `model_id`, `duration_ms`, `tokens_used`, `ok` boolean, linking to `created_by` for per‑user window counts.
+
+### Decorator (`ai_protected`)
+
+Motivations:
+
+- Remove duplicated gating logic across four AI endpoints.
+- Provide a *single edit point* for future enhancements (org‑pool limits, burst buckets, tracing).
+- Ensure identical ordering of checks for consistent user experience and test determinism.
+
+Behavior summary:
+
+| Phase | Outcome on failure | Notes |
+|-------|--------------------|-------|
+| Plan Gate | 402 quota_exceeded | Skipped if DEBUG or `AI_TEST_OPEN=1` |
+| Single‑Write Guard | 429 rate_limited | Only when deterministic debug enforcement enabled |
+| Cache Fast Path | 429 rate_limited | Approximate early rejection; DB count still authoritative |
+| DB Count | 429 rate_limited | Final authoritative limit check |
+
+### Cache Fast Path (Bucket Precheck)
+
+Inside `_rate_limit_check` a lightweight *approximate* limiter executes before hitting the database:
+
+```python
+uid = getattr(request.user, "id", None)
+bucket_key = f"ai_rl:{endpoint_type}:{uid}:{int(now().timestamp() // 60)}"
+count = cache.incr(bucket_key)  # key auto-created with value=1 if absent (backend dependent)
+cache.expire(bucket_key, 120)   # keep key for at most 2 minutes (covers current + slight drift)
+if count > limit: return early 429
+```
+
+Rationale:
+
+- Reduces database reads under bursty load.
+- Over-count risk (race increments) is acceptable because DB pass still executes on success path and may *not* yield 429 (so user may get one extra request through in pathological race conditions—tolerated for now).
+- Keeps implementation trivial; can evolve into token bucket later.
+
+Fallback behavior: If cache backend is unavailable, code silently skips fast path (database check still enforces limits).
+
+### Deterministic Single‑Write Guard (via Decorator)
+
+The guard now lives in the decorator, not inline in each endpoint. It still sets a per‑user cache key (`ai_dbg_single_write:<user_id>`) for 60 seconds under the same activation conditions, returning an immediate 429 on the *second* call. This guarantees stable test assertions without waiting for rolling 60‑second windows to elapse.
 
 ## Single-Write Guard (Deterministic Test Behavior)
 
-Purpose: Provide a stable, reproducible way to assert rate limiting in tests without timing flakiness.
+See updated Decorator section. The semantics are unchanged; only the location moved for maintainability. Tests asserting a second 429 continue to rely on setting:
 
-Activation Conditions:
-
-```text
-DEBUG=1 AND AI_ENFORCE_RATE_LIMIT_DEBUG=1 AND AI_RATE_PER_MIN_PRO=1
+```bash
+DEBUG=1
+AI_ENFORCE_RATE_LIMIT_DEBUG=1
+AI_RATE_PER_MIN_PRO=1
 ```
-Behavior:
 
-1. First `/api/ai/write` for a user sets cache key `ai_dbg_single_write:<user_id>` for 60 seconds.
-2. Second call within TTL returns `429 {"error": "rate_limited", "retry_after": 60}`.
-
-This guard is independent of the general per-minute metric counting so that tests don't depend on synchronous metric persistence ordering.
+The guard remains intentionally simple and *does not* attempt sliding windows—its purpose is predictability, not production efficiency.
 
 ## Per-Minute Limiter
 

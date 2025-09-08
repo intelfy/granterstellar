@@ -98,3 +98,52 @@ DEBUG=1 SECRET_KEY=test python manage.py test -v 2 db_policies.tests
 - If tests return all skipped, you’re on SQLite; set DATABASE_URL to Postgres.
 - Ensure migrations ran and policies exist: `SELECT polname FROM pg_policies;`
 - If an app user can see too much, verify middleware is active and GUCs set.
+
+## Least Privilege & Migration Ownership
+
+For stricter separation of duties in production:
+
+- Create a distinct migration/ddl owner role (e.g. `granterstellar_migrator`) that owns schemas & tables.
+- Application runtime role (`granterstellar_app`) receives only DML (SELECT/INSERT/UPDATE/DELETE) and USAGE on schemas; no CREATE on schema.
+- CI/CD runs `manage.py migrate` using the migrator role credentials; the application container uses the app role.
+- Enforce `NOBYPASSRLS` on both roles; avoid granting table ownership to the app role to prevent implicit privilege escalation.
+
+Example (augmenting earlier snippet):
+
+```sql
+-- Migration owner
+CREATE ROLE granterstellar_migrator LOGIN PASSWORD 'REDACTED' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+ALTER ROLE granterstellar_migrator NOBYPASSRLS;
+
+-- Transfer ownership (run once after initial bootstrap)
+ALTER SCHEMA public OWNER TO granterstellar_migrator;
+-- For each table created prior (or run a generated script):
+-- ALTER TABLE public.mytable OWNER TO granterstellar_migrator;
+
+-- Grant DML to app role
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO granterstellar_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE granterstellar_migrator IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO granterstellar_app;
+```
+
+### Change Management Checklist
+
+1. Apply new migrations in staging with migrator role; run RLS matrix tests against Postgres.
+2. Confirm no table is accidentally owned by `granterstellar_app`:
+
+  ```sql
+  SELECT relname, rolname AS owner
+  FROM pg_class c JOIN pg_roles r ON c.relowner = r.oid
+  WHERE relkind='r' AND r.rolname = 'granterstellar_app';
+  ```
+
+  Expect 0 rows.
+3. Verify policies present for new tables: `SELECT tablename, polname FROM pg_policies WHERE tablename = 'new_table';`
+4. Roll forward only after policy + negative tests pass.
+5. Document any temporary broad grants and schedule their removal.
+
+### Future Hardening Ideas
+
+- Introduce an audit role with read-only + pg_catalog inspection for diagnostics.
+- Add a CI step diffing `pg_policies` output against a committed snapshot to detect accidental policy removal.
+- Periodically run `EXPLAIN` on critical RLS-filtered queries to watch for performance regressions (indexes supporting policy predicates).

@@ -8,6 +8,7 @@ from django.conf import settings
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from app.errors import error_response
 from accounts.views import MeView, DebugTokenObtainPairView, ThrottledTokenObtainPairView
 from billing.views import usage, customer_portal, checkout, cancel_subscription, resume_subscription
 from billing.webhooks import stripe_webhook
@@ -30,13 +31,60 @@ def api_healthz(_request):
     return Response({"status": "ok"})
 
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def api_health(_request):
+    """Lightweight liveness probe (no DB)."""
+    return Response({"status": "ok"})
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def api_ready(_request):
+    """Readiness probe: checks DB and (optionally) cache connectivity.
+
+    Returns shape:
+    {"status":"ok|error","db":bool,"cache":bool,"details":{...}}
+    """
+    db_ok = False
+    cache_ok = False
+    details = {}
+    # DB check
+    try:
+        from django.db import connections
+        with connections['default'].cursor() as cur:  # type: ignore[index]
+            cur.execute('SELECT 1')
+            cur.fetchone()
+        db_ok = True
+    except Exception as exc:  # pragma: no cover - defensive
+        details['db_error'] = str(exc)[:200]
+    # Cache check (only if configured)
+    try:
+        from django.core.cache import cache
+        test_key = 'ready_probe'
+        cache.set(test_key, '1', 5)
+        val = cache.get(test_key)
+        cache_ok = val == '1'
+    except Exception as exc:  # pragma: no cover
+        details['cache_error'] = str(exc)[:200]
+    status = 'ok' if db_ok else 'error'
+    payload = {"status": status, "db": db_ok, "cache": cache_ok, "details": details}
+    if status == 'error':
+        # Wrap in standardized error format while still including top-level keys for backward compatibility.
+        err = error_response('ready_check_failed', 'One or more readiness checks failed', status=503, meta=payload)
+        return err
+    return Response(payload)
+
+
 router = DefaultRouter()
 router.register(r'proposals', ProposalViewSet, basename='proposal')
 router.register(r'orgs', OrganizationViewSet, basename='org')
 
 urlpatterns = [
     path('healthz', healthz),
-    path('api/healthz', api_healthz),
+    path('api/healthz', api_healthz),  # legacy simple probe
+    path('api/health', api_health),    # lightweight liveness
+    path('api/ready', api_ready),      # readiness (db/cache)
     path('api/me', MeView.as_view()),
     # In DEBUG, route password logins through a view that marks the user as Pro tier for testing
     path('api/token', DebugTokenObtainPairView.as_view() if settings.DEBUG else ThrottledTokenObtainPairView.as_view()),
@@ -69,6 +117,7 @@ urlpatterns = [
     path('api/ai/jobs/<int:job_id>', ai_views.job_status),
     path('api/ai/metrics/recent', ai_views.metrics_recent),
     path('api/ai/metrics/summary', ai_views.metrics_summary),
+    path('api/ai/memory/suggestions', ai_views.memory_suggestions),
     # Org invites
     path('api/orgs/invites/accept', OrgInviteAcceptView.as_view({'post': 'create'})),
     # Proposals API

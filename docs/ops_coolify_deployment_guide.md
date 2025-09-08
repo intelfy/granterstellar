@@ -189,6 +189,22 @@ AI_PROVIDER=
 OPENAI_API_KEY=
 GEMINI_API_KEY=
 
+# AI rate & quota caps (optional; unset = defaults / disabled)
+# Per-minute (rpm)
+AI_RATE_PER_MIN_FREE=
+AI_RATE_PER_MIN_PRO=
+AI_RATE_PER_MIN_ENTERPRISE=
+# Daily request caps
+AI_DAILY_REQUEST_CAP_FREE=
+AI_DAILY_REQUEST_CAP_PRO=
+AI_DAILY_REQUEST_CAP_ENTERPRISE=
+# Monthly token caps (write/revise/format endpoints only)
+AI_MONTHLY_TOKENS_CAP_PRO=
+AI_MONTHLY_TOKENS_CAP_ENTERPRISE=
+# Enforce limits even when DEBUG=1 (for local testing)
+AI_ENFORCE_RATE_LIMIT_DEBUG=0
+AI_DETERMINISTIC_SAMPLING=1
+
 Uploads cap enforcement
 
 - The upload API enforces FILE_UPLOAD_MAX_BYTES as the hard cap. If unset, it falls back to FILE_UPLOAD_MAX_MEMORY_SIZE.
@@ -323,6 +339,8 @@ AI endpoints and gating
 - Gating (production): `/api/ai/write`, `/api/ai/revise`, and `/api/ai/format` require a Pro/Enterprise plan in the chosen scope. Free tier requests are blocked with HTTP 402 and `X-Quota-Reason: ai_requires_pro`.
 - DEBUG bypass: When `DEBUG=1`, AI endpoints allow requests regardless of plan (useful for local development and tests).
 - Async (optional): With `AI_ASYNC=1` and Celery configured, AI calls return `{job_id}` and progress can be polled via `/api/ai/jobs/{id}`.
+ - Rate & quota caps (optional): Per-minute request limit (AI_RATE_PER_MIN_*), daily request cap (AI_DAILY_REQUEST_CAP_*), and monthly token cap (AI_MONTHLY_TOKENS_CAP_*) are enforced in that order. Planning endpoint is excluded from monthly token counting. On a 429 you may see headers: `Retry-After`, `X-AI-Daily-Cap`, `X-AI-Daily-Used`, `X-AI-Monthly-Token-Cap`, `X-AI-Monthly-Token-Used` depending on which cap triggered. Set `AI_ENFORCE_RATE_LIMIT_DEBUG=1` to test locally while DEBUG=1.
+ - Deterministic sampling: `AI_DETERMINISTIC_SAMPLING=1` (default) forces stable formatting output (`deterministic=1` marker in formatted text). Set to 0 to allow non-deterministic sampling (marker absent). Always on is recommended for export integrity.
 
 Admin/operations
  
@@ -399,6 +417,7 @@ Notes
 ## Least-privileged DB user (recommended)
 
 For production, use a dedicated Postgres role without BYPASSRLS and with only CRUD on application tables. See `docs/rls_postgres.md` for SQL and guidance.
+
 
 Last updated: 2025-09-01
 

@@ -60,7 +60,7 @@ describe('Author final-format flow', () => {
   const writeBtn = await screen.findByRole('button', { name: /^Write$/ })
   fireEvent.click(writeBtn)
   // Wait for draft to be available which enables Approve & Save
-  await screen.findByText(/Draft/i)
+  await screen.findByTestId('draft-text')
   const approveBtn2 = await screen.findByRole('button', { name: /Approve & Save/i })
     fireEvent.click(approveBtn2)
 

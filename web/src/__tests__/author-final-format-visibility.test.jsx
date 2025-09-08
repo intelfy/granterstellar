@@ -38,7 +38,7 @@ describe('Author final-format visibility', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^Start$/ }))
     await screen.findByText(/Section 1 \/ 2/i)
     fireEvent.click(await screen.findByRole('button', { name: /^Write$/ }))
-    await screen.findByText(/Draft/i)
+  await screen.findByTestId('draft-text')
     fireEvent.click(await screen.findByRole('button', { name: /Approve & Save/i }))
     await screen.findByText(/Section 2 \/ 2/i)
 

@@ -11,7 +11,8 @@ This is a minimal checklist for verifying health, diagnosing common issues, and 
 
 ## Health and smoke checks
 
-- API liveness: GET /healthz (200 ok)
+- API liveness: GET /api/health (200 OK if process responding)
+- API readiness: GET /api/ready (200 OK only if DB + cache reachable; standardized error JSON otherwise)
 - Usage payload: GET /api/usage (with and without X-Org-ID)
 - SPA: visit /app (router loads; console clean in prod)
 - Stripe webhook (DEBUG): POST /api/stripe/webhook with a test event
@@ -42,23 +43,24 @@ VS Code tasks
 
 - AI rate limiting & gating
   - Symptoms:
-    - 429 Too Many Requests on second rapid call (expected in DEBUG with single-write guard)
+    - 429 Too Many Requests on second rapid call (expected in DEBUG with deterministic single-write guard)
     - Unexpected 429s under light load
-  - Layers:
-    - Plan gating (Pro/Enterprise required for some endpoints)
-    - Per-minute tier limits (FREE / PRO / ENTERPRISE) via env-configured RPM
-    - Deterministic single-write debug limiter (enforced only when AI_ENFORCE_RATE_LIMIT_DEBUG=1) for test stability
+  - Layers (executed by `ai_protected` decorator):
+    - Plan gating (Pro/Enterprise required; bypass in DEBUG / AI_TEST_OPEN)
+    - Deterministic single-write debug guard (opt-in via env)
+    - Cache fast path (approximate per-minute bucket) for early rejection
+    - Authoritative DB count (AIMetric window)
   - Key env vars:
     - AI_RATE_PER_MIN_FREE, AI_RATE_PER_MIN_PRO, AI_RATE_PER_MIN_ENTERPRISE
     - AI_ENFORCE_RATE_LIMIT_DEBUG (0/1)
-    - AI_TEST_OPEN (if set, may relax gating for tests)
+    - AI_TEST_OPEN (optional bypass)
   - Checks:
-    - Response headers: X-AI-Rate-Remaining, X-AI-Rate-Limit (if exposed)
-    - Cache backend availability (single-write guard uses Django cache)
+    - Cache functioning (fast path + single-write guard rely on Django cache)
+    - AIMetric rows increasing post-call (DB layer)
   - Fix:
-    - Raise specific RPM env var for tier if legitimate traffic growth
-    - Disable debug enforcement locally by unsetting AI_ENFORCE_RATE_LIMIT_DEBUG
-    - Purge stale cache key `ai_dbg_single_write:<user_id>` if stuck (rare)
+    - Increase env RPM for legitimate higher load
+    - Clear stuck cache key `ai_dbg_single_write:<user_id>` (or wait TTL)
+    - Disable deterministic guard by unsetting AI_ENFORCE_RATE_LIMIT_DEBUG if interfering with manual testing
   - Reference: `docs/ai_rate_limiting.md`
 
 - Exports

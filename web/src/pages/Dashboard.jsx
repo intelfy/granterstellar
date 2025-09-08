@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, apiMaybeAsync, apiUpload, safeOpenExternal, openDebugLocal, formatDiscount } from '../lib/core.js'
+import _MemorySuggestions from '../components/MemorySuggestions.jsx'
 
 function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
   const [plan, setPlan] = useState(null)
@@ -19,6 +20,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
   const [uploadError, setUploadError] = useState('')
   const [note, setNote] = useState('')
   const [me, setMe] = useState(null)
+  const [memoryRefresh, setMemoryRefresh] = useState(0)
 
   const sections = plan?.sections || []
   const current = sections[sectionIndex]
@@ -96,6 +98,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
         },
       })
       setDraft(res?.draft_text || '')
+      setMemoryRefresh(r => r + 1) // newly recorded answers become suggestions
   } catch {
       setError('Write failed')
     } finally { setLoading(false) }
@@ -119,6 +122,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
         },
       })
       setDraft(res?.draft_text || draft)
+      setMemoryRefresh(r => r + 1) // change requests recorded
   } catch {
       setError('Revise failed')
     } finally { setLoading(false) }
@@ -233,6 +237,20 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
                 <textarea rows={2} value={answers[key] || ''} onChange={(e) => setAnswers(a => ({ ...a, [key]: e.target.value }))} />
               </div>
             ))}
+            <_MemorySuggestions
+              token={token}
+              orgId={orgId || undefined}
+              sectionId={current?.id}
+              refreshKey={memoryRefresh + ':' + current?.id}
+              onInsert={(key, value) => {
+                setAnswers(a => {
+                  const existing = a[key] || ''
+                  if (!existing) return { ...a, [key]: value }
+                  if (existing.includes(value)) return a
+                  return { ...a, [key]: existing + (existing.endsWith('\n') ? '' : '\n') + value }
+                })
+              }}
+            />
             <div>
               <label htmlFor={`file-${current?.id || 'section'}`}>Attach files (pdf, docx, txt, images)</label>
               <input id={`file-${current?.id || 'section'}`} type="file" accept=".pdf,.docx,.txt,image/*" onChange={onUploadFile} />
@@ -273,7 +291,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div>Draft</div>
-                  <pre>{(draft || prevText) || '—'}</pre>
+                  <pre data-testid="draft-text">{(draft || prevText) || '—'}</pre>
                 </div>
               </div>
             </div>

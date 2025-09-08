@@ -18,7 +18,7 @@ class AIRateLimitTests(TestCase):
         self.client.defaults['HTTP_AUTHORIZATION'] = f"Bearer {self.token}"
 
     def test_second_write_is_limited(self):
-        """Placeholder: enable when rate limiting logic is implemented."""
+    # Second immediate write returns 429 under single-write debug guard (AI_RATE_PER_MIN_PRO=1).
         data = {"proposal_id": "p1", "section_id": "s1", "prompt": "First"}
         # First request should succeed
         r1 = self.client.post('/api/ai/write', data=data, content_type='application/json')
