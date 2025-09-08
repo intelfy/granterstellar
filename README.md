@@ -30,6 +30,7 @@ Contributing? See `CONTRIBUTING.md` for local tasks, lint/tests, and conventions
 - Backend: Django + DRF, Postgres, optional Celery/Redis
 - Frontend: React (Vite)
 - AI: Provider abstraction (GPT-5 plans/writes, Gemini formats/polishes) with plan gating, per‑minute limiter, and deterministic single-write debug limiter (see `docs/ai_rate_limiting.md`).
+  - RAG Phase 1 (resources, chunking, similarity dedupe, deterministic retrieval) documented in `docs/rag_ingestion.md`.
 - Billing: Stripe subscriptions + bundles + customer portal/webhooks
 - Exports: Canonical Markdown → DOCX/PDF, deterministic outputs/checksums
   - Design & guarantees: see `docs/deterministic_exports.md`

@@ -17,6 +17,7 @@ Active docs
 - Exports async/Celery: `docs/exports_async.md`
 - Deterministic export contract: `docs/deterministic_exports.md`
 - AI rate limiting & gating: `docs/ai_rate_limiting.md`
+- RAG ingestion & retrieval (phase 1): `docs/rag_ingestion.md`
 - Prompt contracts & rendering: `docs/prompt_contracts.md`
 - Proposals model/endpoints and autosave: `docs/proposals.md`
 - Postgres RLS policies and least-privileged DB user: `docs/rls_postgres.md`
