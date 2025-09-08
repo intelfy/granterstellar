@@ -6,7 +6,7 @@ whitenoise==6.7.0
 django-cors-headers==4.4.0
 python-dotenv==1.0.1
 celery==5.4.0
-redis==5.0.7
+redis==6.4.0
 dj-database-url==2.2.0
 stripe==10.6.0
 PyJWT==2.9.0
