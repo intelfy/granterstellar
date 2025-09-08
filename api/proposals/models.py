@@ -9,11 +9,17 @@ class Proposal(models.Model):
         ('archived', 'Archived'),
     )
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='proposals')
+    # NOTE: Field is NOT NULL (enforced via migration 0003_require_org_on_proposal).
+    # Using PROTECT reflects actual expectation: organizations with proposals
+    # shouldn't be deleted silently. Historical NULL backfill already occurred.
+    # This introduces a small schema divergence (was SET_NULL when nullable).
+    # If prior state must be preserved, revert and allow null=True; otherwise
+    # generate a migration to align DB constraint with PROTECT.
     org = models.ForeignKey(
         'orgs.Organization',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
+        null=False,
+        blank=False,
         related_name='proposals',
     )
     state = models.CharField(max_length=16, choices=STATE_CHOICES, default='draft')
