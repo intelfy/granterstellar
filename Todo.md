@@ -46,6 +46,52 @@ Legend: [ ] todo, [~] in progress, [x] done
 - [ ] RAG store (templates/samples); curate initial self-hosted set
 - [ ] Prepare batch task & prompts for Gemini-2.5-Flash to twice a week search web for templates and successful/winning proposal samples for common grant calls we don't currently have templates for and integrate them into the RAG. Files should be categorized as either samples or templates. Log all new files added.
 - [ ] Implement AI/user interaction flow: The user provides the open call they're applying for --> The planner (using web search to review the user's input URL for the open call and compares against templates/samples in the RAG) determines what sections will be needed and what information should be prefilled (drawing also from the organization metadata like name/description) and what questions to ask the user per section --> The writer parses the user's answers per section and fleshes out the section for review/revision until user approves --> the user is asked the next set of questions for the next section --> the writer repeats --> ... --> once all pre-planned sections are done, the user approves the text a final time, before the formatter structures it (prioritizing a good looking PDF formatting) according to a template (if one exists) or inference and similar sample writing and web search grounding (if a template does not exist) --> Formatter presents a mockup of the final .PDF versio of the file, formatted to closely resemble the templates/samples in layout --> The user exports the formatted file in their chosen extension, (or opens the editor and is asked which section they would like to edit, and whether they would like to edit the raw text manually or rerun the AI interactions for that section)
+  
+### NEW: Alpha-Critical Gaps (must complete before end-to-end testable AI flow)
+
+These clarify that USERS NEVER SUPPLY PROMPTS DIRECTLY — backend owns role-specific prompt engineering.
+
+- [x] Prompt Template System (High) — Implemented via `AIPromptTemplate` (name, version, variables, checksum auto-recomputed). Snapshots stored on `AIJobContext` (`rendered_prompt_redacted`, `prompt_version`, `template_sha256`).  
+- [ ] Role-Specific Prompt Contracts (High) — Define strict input schema per role:  
+  - Planner receives ONLY `{grant_url, grant_call_text?, org_profile}` and must output JSON schema: `{schema_version, sections:[{id,title,questions:[...] }]}`.  
+  - Writer receives `{section_id, section_title, answers, approved_section_summaries[], memory[], retrieval_snippets[], file_refs[]}` and produces plain markdown draft text only.  
+  - Reviser receives `{base_text, change_request, memory[], retrieval_snippets[], file_refs[]}` and returns revised text + structured diff object.  
+  - Formatter receives `{full_text, template_hint?, style_guidelines?, assets?, file_refs[]}` and returns formatted markdown canonical form (later rendered to PDF/DOCX).  
+  Add validation: reject provider output if schema mismatch (fail early with clear error).  
+- [x] AIJobContext / Prompt Audit (High) — Implemented: fields present (`template_sha256`, `redaction_map`, `model_params`, `snippet_ids`, `retrieval_metrics`). Deterministic redaction taxonomy + mapping persisted.  
+- [ ] RAG Data Models (High) — Create `AIResource` (template|sample|call_snapshot), `AIChunk` (resource_fk, ord, text, embedding_key/vector, token_len, metadata: {section_hint, license, source_url, type}), migration + admin.  
+- [ ] Embedding Service (High) — Integrate MiniLM-L6-v2 (sentence-transformers). Abstraction `EmbeddingService` with pluggable backend (dev: FAISS in tmp dir; prod: Mongo Atlas vector index). Provide `embed(texts) -> List[Vector]` + health check.  
+- [ ] Chunking & Ingestion Pipeline (High) — Celery task: fetch grant URL → clean HTML → produce call_snapshot resource → chunk & embed; ingestion for curated templates/samples (YAML manifest). Deduplicate by sha256(text) prefix & similarity (cosine >0.97).  
+- [ ] Retrieval Integration (High) — Planner: semantic match templates/samples by call text & org profile → include matched template IDs & rationale in planner prompt. Writer/Reviser: top-k snippet retrieval gated by token budget. Implement dynamic token budgeting (reserve % for user answers & memory).  
+- [ ] Dynamic Question Generation (High) — Planner populates `questions` per section using retrieved template question banks + gap analysis of org metadata vs template required fields. Provide deterministic fallback set when retrieval empty.  
+- [ ] Memory Injection Upgrade (High) — Replace underscore hack with explicit memory field in writer/reviser prompt assembly; add scoring (usage_count + recency decay) and token truncation.  
+- [ ] Section Workflow Model (High) — Add `ProposalSection` model (proposal_fk, section_id, state=draft|approved, draft_text, approved_text, revisions JSON (list), updated_at). Migrate existing proposal `content` into sections mapping.  
+- [ ] Revision Diff Engine (High) — Implement paragraph/semantic diff (rapidfuzz) returning JSON blocks with change types; integrate into revise task (replace "stub").  
+- [ ] Quota Binding to AI Usage (High) — Map each approved section (first approval) to proposal usage increment; enforce cap before enqueue write/revise if section already approved (unless revision). Track token usage per section in metrics.  
+- [ ] Token & Phase Metrics (High) — Extend `AIMetric` or new `AIPhaseMetric` to capture retrieval_ms, embedding_ms, prompt_tokens, completion_tokens, snippet_count, memory_count.  
+- [ ] Provider Fallback & Circuit Breaker (High) — Wrap calls: on model failure/timeouts escalate to secondary provider; maintain failure counters; open circuit after threshold.  
+- [ ] Prompt Safety / Injection Shield (High) — Pre-flight scan of user answers & memory for disallowed directives (regex list) + neutralization; log events; abort with safe error.  
+- [x] PII Redaction Layer (High) — Deterministic category tokens `[CATEGORY_hash]` (EMAIL, NUMBER, PHONE, ID_CODE, SIMPLE_NAME, ADDRESS_LINE) with persisted `redaction_map`. Follow-ups: monitoring metrics, admin review UI.  
+- [ ] Context Budget Manager (High) — Central utility that given model max_tokens & reserved output tokens returns trimmed sets: retrieval snippets, memory items, file refs. Ensures deterministic ordering & annotation.  
+- [ ] Retrieval Caching (Medium) — Cache (grant_call_hash, section_id) → snippet IDs for TTL 24h to reduce re-embedding cost; bust on new resource ingestion.  
+- [ ] Scheduled RAG Refresh (Medium) — Celery beat: 2x weekly run ingestion tasks for new public grant calls list; summary log with counts (added, duplicates, failed).  
+- [ ] Re-Embed Drift Task (Medium) — If embedding model version changes, queue re-embed for all resources (batch throttled).  
+- [ ] Cleanup & TTL (Medium) — Purge AIJob + AIJobContext older than 30 days; archive metrics.  
+- [ ] E2E Alpha Test Suite (High) — New test path: simulate user providing only URL → expect full section question plan → iterative answer & write cycle → revise → approve → format → export PDF stub. Includes assertions for prompt_version and retrieval snippet references.  
+- [ ] Documentation: Add `docs/ai_prompts.md` describing role contracts, variable semantics, safety policy; warn that direct user prompt injection is unsupported.  
+
+- [ ] (Follow-up) Semantic Rerank (Low) — Cross-encoder rerank top 30 retrieval, keep best 6.
+- [ ] (Follow-up) Streaming Writer (Low) — SSE endpoint streaming partial drafts (gated by provider support).
+
+- [ ] Test: planner schema validation rejects malformed provider JSON.
+- [ ] Test: writer rejects output containing JSON or non-markdown gating markers.
+- [ ] Test: diff engine returns added/removed counts > 0 when change_request supplied.
+- [ ] Test: quota denial when cap reached before new section write.
+- [ ] Test: prompt audit row created & redacted fields masked.
+- [ ] Test: injection shield blocks disallowed directive phrase.
+- [ ] Test: retrieval fallback path (no snippets) still plans sections.
+- [ ] Test: memory scoring excludes aged low-usage items after threshold.
+
 - [x] Implement AI memory per user/org (model `AIMemory` + suggestions endpoint `/api/ai/memory/suggestions`) with automatic capture on write/revise and integration into provider prompt context.
   - Storage: Idempotent dedup via `(created_by, org_id, key_hash, value_hash)` uniqueness; per‑scope retrieval with strict isolation (org memories excluded from personal unless `X-Org-ID` header supplied).
   - Prompt integration (2025-09-08): `write` injects top (limit 3) suggestions under reserved answer key `_memory_context` as a `[context:memory]` block; `revise` appends `[context:memory]` block to `change_request`. Underscore key prevents recursive persistence.
@@ -119,22 +165,33 @@ Legend: [ ] todo, [~] in progress, [x] done
 - Coolify app definitions
   - [ ] Define services: API, SPA static (or landing), Postgres, optional Redis (Celery/async)
   - [ ] Attach Traefik routes for `/`, `/app`, `/api`, `/static/app/`, `/media/` as per routing map
-  - [ ] Configure environment variables (PROD) end-to-end (see list below); validate via Coolify variables UI
+  - [x] Configure environment variables (PROD) end-to-end — authoritative matrix now in `docs/ops_coolify_deployment_guide.md` (kept in sync)
   - [ ] Health checks: API GET `/api/health`; readiness GET `/api/ready`; static GET `/` (or `/app/`)
 
 - PROD environment variables (must set)
-  - [ ] Core: `SECRET_KEY`, `ALLOWED_HOSTS`, `PUBLIC_BASE_URL`, `DATABASE_URL`, `REDIS_URL` (if async)
-  - [ ] Security: `SECURE_*`, `SESSION_*`, `CSRF_*`, `CSP_*` (Script/Style/Connect allow-lists minimal)
+  - [x] Core: `SECRET_KEY`, `ALLOWED_HOSTS`, `PUBLIC_BASE_URL`, `DATABASE_URL`, `REDIS_URL` (if async)
+  - [x] Security: `SECURE_*`, `SESSION_*`, `CSRF_*`, `CSP_*` (Script/Style/Connect allow-lists minimal)
   - [ ] OAuth: `GOOGLE_*`, `GITHUB_*`, `FACEBOOK_*`, `OAUTH_REDIRECT_URI`, JWKS/issuer where needed
-  - [ ] Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, prices `PRICE_*`
+  - [x] Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, prices `PRICE_*` (enterprise placeholder noted)
   - [ ] Async toggles: `EXPORTS_ASYNC`, `AI_ASYNC`, `CELERY_*` (if used)
   - [ ] SPA: `VITE_BASE_URL`, `VITE_API_BASE`, `VITE_ROUTER_BASE=/app`, optional `VITE_UMAMI_*`
-  - [ ] Uploads/OCR, Quotas, AI provider keys per `.github/copilot-instructions.md`
+  - [x] Uploads/OCR, Quotas, AI provider keys per `.github/copilot-instructions.md`
 
 - Docs refresh — install_guide.md (idiot-proof)
-  - [ ] Update `docs/install_guide.md` with step-by-step Coolify deployment: create DB, add services, set envs, connect domains
+  - [ ] Update `docs/install_guide.md` referencing new env matrix (avoid duplication)
   - [ ] Include screenshots of critical steps (variables, routes, health checks), and a copy-paste env block template
   - [ ] Post-deploy validation checklist: health endpoints, CSP errors absent, OAuth login, Stripe webhook received, file upload OK
+
+### NEW: Environment Doctor & Consistency
+
+- [ ] Implement `manage.py env_doctor` command:
+  - Validates production invariants (SECRET_KEY not default, ALLOWED_HOSTS no `*`, CORS_ALLOW_ALL=0 when DEBUG=0)
+  - Ensures conditional groups complete (Stripe, OAuth, Redis/Celery, AI provider)
+  - Warns JWT_SIGNING_KEY == SECRET_KEY in prod
+  - Lists unset optional security hardening vars (CSP_* when analytics configured)
+  - Exits non-zero on hard errors; zero with warnings for advisory gaps
+- [ ] Add CI step invoking `python manage.py env_doctor --strict` (DEBUG=0 simulation) using a sample `.env.ci` to prevent regressions
+- [ ] Document env doctor usage in deployment guide (link to command section) once implemented
 
 ### 8. Proxy/CSP and deploy routes (Coolify/Traefik)
 
@@ -215,6 +272,22 @@ Legend: [ ] todo, [~] in progress, [x] done
 
 ## Open backlog (scoped, non-exhaustive)
 
+### Recently Completed (2025-09-08)
+
+- Formatter blueprint injection (conditional append of instructions + sorted JSON schema for role `formatter`).
+- Template drift detection function with DB refetch; test `test_context_includes_checksum_and_drift_detection` green.
+- Automatic checksum recomputation on template save to avoid stale comparisons.
+- Deterministic redaction taxonomy + persisted `redaction_map` enabling reproducible audits.
+
+### Follow-Up (Prompt Governance)
+
+- [ ] Drift metrics aggregation (count drifted templates / 24h) & admin report.
+- [ ] Redaction coverage metric (tokens per category) for anomaly detection.
+- [ ] Negative control drift test (unchanged template after unrelated field update).
+- [ ] Admin UI: view original vs redacted prompt snapshot + category legend.
+- [ ] Blueprint schema lint (ensure stable ordering, max size guard) in CI.
+- [ ] Optional: redact_map diff tool if taxonomy expands.
+
 Database
 
 - [ ] Optional UsageEvents (AI metering)
@@ -261,7 +334,7 @@ AI Providers (additional)
 
 - [ ] Per-provider timeout & retry (circuit breaker counters)
 - [ ] Token usage accounting scaffold
-- [ ] Prompt redaction layer (strip PII) before logging
+- [x] Prompt redaction layer (strip PII) before logging — covered by deterministic redaction taxonomy.
 
 RLS & Roles Model
 
@@ -297,11 +370,35 @@ Container & Build
 - [ ] Extend STRIP_PY test to cover new modules added
 - [ ] Multi-arch build documentation
 
-Accessibility & i18n (extensions)
+## 12 i18n Readiness (pre-design hardening)
 
-- [ ] Add vitest + axe-core scans for key routes
-- [ ] Introduce `web/src/locales/en/messages.json` scaffold
-- [ ] Track UI string externalization progress metric
+Goal: Centralize ALL user-facing strings before visual redesign to avoid churn; establish translation pipeline & enforcement. Users should never see unfrozen copy outside keys store.
+
+Phases
+
+- [ ] Inventory & Classification — Script: scan `web/src/**/*.{ts,tsx,js,jsx}` + root HTML pages for probable user-facing literals (regex: words with spaces, exclude ALL_CAPS, URLs, variables). Output CSV: file, line, original_text, hash.
+- [ ] Key Namespace Design — Adopt convention `area.component.purpose` (e.g., `auth.login.button_submit`). Document in `docs/design_system.md` (i18n section) and add linter rule description.
+- [ ] Minimal Runtime Layer — Implement lightweight `t(key, fallback?)` + `useT()` hook with TypeScript key union generated from JSON schema. No heavy lib yet (keep bundle small); future-compatible with ICU messages.
+- [ ] Messages Store Scaffold — Create `web/src/locales/en/messages.json` (flat map) + generation script to sort keys alphabetically & validate collisions.
+- [ ] Extraction Tooling — Node script: replaces raw literals (approved list) with `t('...')`; emits diff summary (# replaced, skipped). Manual review required for ambiguous strings (length < 4, dynamic templates, placeholders).
+- [ ] Placeholder & Interpolation — Implement simple `{name}` variable substitution using template function `t.key('auth.greeting', {name: userFirstName})` with compile-time key checking.
+- [ ] HTML & Django Templates Pass — Extract strings from `index.html`, landing pages, simple Django templates (if any user-facing). Replace with placeholders pulling from a preloaded JSON (inline script tag `window.__LOCALES__`).
+- [ ] Backend i18n Scaffold — Add `locale/` with `django-admin makemessages` config (even if EN only). Ensure `USE_I18N=True`. Add extraction make target.
+- [ ] Enforcement ESLint Rule — Custom rule or config: forbid string literals in JSX children unless wrapped in `t()` (allow list for a11y attributes, test files). Failing CI if new violations.
+- [ ] CI Guard — Job: run extraction diff; if new raw strings detected (not in allowlist), fail with guidance.
+- [ ] Progress Metric — Script counts (% externalized = externalized / (externalized + remaining_detected)). Print badge in CI logs.
+- [ ] Accessibility Synergy — Integrate axe-core scans (dashboard, proposal editor, billing, uploads) after strings externalized to ensure labels preserved.
+- [ ] Docs — Add `docs/i18n.md`: philosophy, key naming, extraction workflow, adding new strings checklist.
+- [ ] Post-Extraction Cleanup — Remove duplicate or unused keys (script: reference count across source; warn unused >30 days).
+- [ ] Future (Deferred) — Add locale switcher UI + language negotiation (Accept-Language) + crowd/managed translation pipeline.
+
+Tests
+
+- [ ] Test: extraction script produces deterministic hash for unchanged files.
+- [ ] Test: ESLint rule flags inline string in JSX.
+- [ ] Test: interpolation `{name}` replaced correctly and escapes HTML.
+- [ ] Test: fallback returns key when missing translation (and logs once).
+- [ ] Test: progress metric output >= previous run (non-regression) or explicitly annotated decrease.
 
 Housekeeping
 
@@ -327,16 +424,7 @@ Frontend (SPA)
 
 - [ ] Integrate SurveyJS for authoring
 
-Accessibility & i18n
-
-- [ ] Extract user-facing copy into keys store (prep for styling/i18n)
-- [ ] Automated accessibility baseline (jest-axe / axe-core) for key routes (dashboard, proposal editor, billing, uploads)
-- [ ] Add accessibility checklist section to `docs/design_system.md` (focus states, landmarks, aria labels, color contrast)
-- [ ] Backend: introduce gettext extraction script + initial `locale` directory scaffolding
-- [ ] SPA: add i18n scaffolding (e.g., react-intl or lightweight translation layer) and replace hard-coded strings path-by-path
-- [ ] Add vitest + axe-core scans for key routes
-- [ ] Introduce `web/src/locales/en/messages.json` scaffold
-- [ ] Track UI string externalization progress metric
+ 
 
 Proxy/Networking
 
