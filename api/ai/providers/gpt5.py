@@ -12,7 +12,14 @@ class Gpt5Provider(BaseProvider):
         ]
         return {"schema_version": "v1", "source": grant_url or "text", "sections": sections, "model": "gpt-5"}
 
-    def write(self, *, section_id: str, answers: Dict[str, str], file_refs: Optional[List[Dict[str, Any]]] = None) -> AIResult:
+    def write(
+        self,
+        *,
+        section_id: str,
+        answers: Dict[str, str],
+        file_refs: Optional[List[Dict[str, Any]]] = None,
+        deterministic: bool = False,
+    ) -> AIResult:
         draft = (
             f"[gpt-5] Draft for {section_id}:\n" + "\n".join(f"- {k}: {v}" for k, v in answers.items())
         )
@@ -25,6 +32,7 @@ class Gpt5Provider(BaseProvider):
         base_text: str,
         change_request: str,
         file_refs: Optional[List[Dict[str, Any]]] = None,
+        deterministic: bool = False,
     ) -> AIResult:
         text = base_text + "\n\n[gpt-5] Changes: " + change_request
         ctx = summarize_file_refs(file_refs)

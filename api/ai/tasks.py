@@ -21,7 +21,7 @@ def run_plan(job_id: int):
             grant_url=job.input_json.get('grant_url'),
             text_spec=job.input_json.get('text_spec'),
         )
-        job.result_json = plan
+        job.result_json = plan  # type: ignore[assignment]
         job.status = 'done'
         dt_ms = int((time.time() - t0) * 1000)
         try:
@@ -64,12 +64,18 @@ def run_write(job_id: int):
     try:
         prov = _provider()
         t0 = time.time()
+        det_setting = getattr(settings, 'AI_DETERMINISTIC_SAMPLING', True)
+        try:
+            det_default = bool(False if str(det_setting) in ("0", "false", "False") else det_setting)
+        except Exception:
+            det_default = True
         res = prov.write(
             section_id=job.input_json.get('section_id') or '',
             answers=job.input_json.get('answers') or {},
             file_refs=job.input_json.get('file_refs') or None,
+            deterministic=det_default,
         )
-        job.result_json = {
+        job.result_json = {  # type: ignore[assignment]
             "draft_text": res.text,
             "assets": [],
             "tokens_used": res.usage_tokens,
@@ -120,12 +126,18 @@ def run_revise(job_id: int):
     try:
         prov = _provider()
         t0 = time.time()
+        det_setting = getattr(settings, 'AI_DETERMINISTIC_SAMPLING', True)
+        try:
+            det_default = bool(False if str(det_setting) in ("0", "false", "False") else det_setting)
+        except Exception:
+            det_default = True
         res = prov.revise(
             base_text=job.input_json.get('base_text') or '',
             change_request=job.input_json.get('change_request') or '',
             file_refs=job.input_json.get('file_refs') or None,
+            deterministic=det_default,
         )
-        job.result_json = {"draft_text": res.text, "diff": "stub"}
+        job.result_json = {"draft_text": res.text, "diff": "stub"}  # type: ignore[assignment]
         job.status = 'done'
         dt_ms = int((time.time() - t0) * 1000)
         try:
@@ -178,7 +190,7 @@ def run_format(job_id: int):
             file_refs=job.input_json.get('file_refs') or None,
             deterministic=True,
         )
-        job.result_json = {"formatted_text": res.text}
+        job.result_json = {"formatted_text": res.text}  # type: ignore[assignment]
         job.status = 'done'
         dt_ms = int((time.time() - t0) * 1000)
         try:

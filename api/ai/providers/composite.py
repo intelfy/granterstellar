@@ -14,11 +14,30 @@ class CompositeProvider(BaseProvider):
     def plan(self, *, grant_url: str | None, text_spec: str | None) -> Dict:
         return self.gpt.plan(grant_url=grant_url, text_spec=text_spec)
 
-    def write(self, *, section_id: str, answers: Dict[str, str], file_refs: Optional[List[Dict[str, Any]]] = None) -> AIResult:
-        return self.gpt.write(section_id=section_id, answers=answers, file_refs=file_refs)
+    def write(
+        self,
+        *,
+        section_id: str,
+        answers: Dict[str, str],
+        file_refs: Optional[List[Dict[str, Any]]] = None,
+        deterministic: bool = False,
+    ) -> AIResult:
+        return self.gpt.write(section_id=section_id, answers=answers, file_refs=file_refs, deterministic=deterministic)
 
-    def revise(self, *, base_text: str, change_request: str, file_refs: Optional[List[Dict[str, Any]]] = None) -> AIResult:
-        return self.gemini.revise(base_text=base_text, change_request=change_request, file_refs=file_refs)
+    def revise(
+        self,
+        *,
+        base_text: str,
+        change_request: str,
+        file_refs: Optional[List[Dict[str, Any]]] = None,
+        deterministic: bool = False,
+    ) -> AIResult:
+        return self.gemini.revise(
+            base_text=base_text,
+            change_request=change_request,
+            file_refs=file_refs,
+            deterministic=deterministic,
+        )
 
     def format_final(
         self,

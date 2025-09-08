@@ -234,5 +234,26 @@
 			"isBackground": true,
 			"group": "build"
 		}
+		,
+		{
+			"label": "Services: up db",
+			"type": "shell",
+			"command": "docker compose -f app-compose.yml up -d db",
+			"group": "build",
+			"problemMatcher": []
+		}
+		,
+		{
+			"label": "RLS: up db + test",
+			"type": "shell",
+			"command": "set -euo pipefail; docker compose -f app-compose.yml up -d db; echo 'Waiting for Postgres...'; for i in $(seq 1 30); do pg_isready -h 127.0.0.1 -p 5432 -U appuser >/dev/null 2>&1 && break || sleep 1; done; cd api; DEBUG=1 SECRET_KEY=test DATABASE_URL=postgresql://appuser:changeme2@127.0.0.1:5432/granterstellar .venv/bin/python manage.py test -v 2 db_policies.tests; TEST_EXIT=$?; cd ..; docker compose -f app-compose.yml down -v --remove-orphans; exit $TEST_EXIT",
+			"group": "test",
+			"problemMatcher": ["$python"],
+			"options": {
+				"env": {
+					"DJANGO_SETTINGS_MODULE": "app.settings"
+				}
+			}
+		}
 	]
 }

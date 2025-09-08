@@ -16,6 +16,7 @@ class BaseProvider:
         section_id: str,
         answers: Dict[str, str],
         file_refs: Optional[List[Dict[str, Any]]] = None,
+    deterministic: bool = False,
     ):
         raise NotImplementedError
     def revise(
@@ -24,6 +25,7 @@ class BaseProvider:
         base_text: str,
         change_request: str,
         file_refs: Optional[List[Dict[str, Any]]] = None,
+    deterministic: bool = False,
     ):
         raise NotImplementedError
     def format_final(

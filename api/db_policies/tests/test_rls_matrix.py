@@ -54,13 +54,15 @@ class RLSMatrixTests(TestCase):
                 Proposal.objects.create(author=self.bob, org=self.org1, content={"t": "member insert"})
 
     def test_admin_can_insert_org_proposal(self):
-        set_guc(self.alice.id)
+        # Must set org + role admin for insert per 0011 granular policies
+        set_guc(self.alice.id, self.org1.id, "admin")
         p = Proposal.objects.create(author=self.alice, org=self.org1, content={"t": "admin insert"})
         self.assertEqual(Proposal.objects.get(id=p.id).content.get("t"), "admin insert")
 
     def test_shared_with_grants_visibility(self):
-        set_guc(self.alice.id)
-        p = Proposal.objects.create(author=self.alice, content={"t": "shared to bob"}, shared_with=[self.bob.id])
+        # Admin creates and shares an org-scoped proposal
+        set_guc(self.alice.id, self.org1.id, "admin")
+        p = Proposal.objects.create(author=self.alice, org=self.org1, content={"t": "shared to bob"}, shared_with=[self.bob.id])
         set_guc(self.bob.id)
         titles = {pr.content.get("t") for pr in Proposal.objects.all()}
         self.assertIn("shared to bob", titles)
@@ -81,29 +83,20 @@ class RLSMatrixTests(TestCase):
                 OrgUser.objects.create(org=self.org1, user=self.charlie, role="member")
 
     def test_admin_can_delete_org_proposal_member_cannot(self):
-        set_guc(self.alice.id)
+        set_guc(self.alice.id, self.org1.id, "admin")
         p = Proposal.objects.create(author=self.alice, org=self.org1, content={"t": "to delete"})
         set_guc(self.bob.id)
         self.assertEqual(Proposal.objects.filter(id=p.id).delete()[0], 0)
-        set_guc(self.alice.id)
+        set_guc(self.alice.id, self.org1.id, "admin")
         self.assertEqual(Proposal.objects.filter(id=p.id).delete()[0], 1)
 
     def test_member_cannot_read_or_update_org_proposals(self):
-        set_guc(self.alice.id)
+        set_guc(self.alice.id, self.org1.id, "admin")
         p = Proposal.objects.create(author=self.alice, org=self.org1, content={"t": "org visible"})
         set_guc(self.bob.id)
         titles = {pr.content.get("t") for pr in Proposal.objects.filter(org=self.org1)}
         self.assertNotIn("org visible", titles)
         self.assertEqual(Proposal.objects.filter(id=p.id).update(content={"t": "member edit"}), 0)
-
-    def test_creator_sees_own_personal_only(self):
-        set_guc(self.alice.id)
-        pa = Proposal.objects.create(author=self.alice, content={"t": "alice personal"})
-        set_guc(self.bob.id)
-        pb = Proposal.objects.create(author=self.bob, content={"t": "bob personal"})
-        set_guc(self.alice.id)
-        titles = {pr.content.get("t") for pr in Proposal.objects.all()}
-        self.assertIn("alice personal", titles)
-        self.assertNotIn("bob personal", titles)
-        set_guc(None, None, "user")
-        self.assertEqual(Proposal.objects.filter(id__in=[pa.id, pb.id]).count(), 0)
+    @unittest.skip("Personal proposals removed: org_id now mandatory; legacy personal test deprecated.")
+    def test_creator_sees_own_personal_only(self):  # pragma: no cover - intentionally skipped
+        pass

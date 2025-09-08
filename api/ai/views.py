@@ -271,7 +271,21 @@ def write(request):
                 answers['_memory_context'] = "[context:memory]\n" + "\n".join(context_lines)
     except Exception:
         pass
-    res = provider.write(section_id=section_id, answers=answers, file_refs=file_refs or None)
+    # Deterministic sampling: allow request override; default from settings
+    deterministic_setting = getattr(settings, 'AI_DETERMINISTIC_SAMPLING', True)
+    try:
+        deterministic_default = bool(False if str(deterministic_setting) in ("0", "false", "False") else deterministic_setting)
+    except Exception:
+        deterministic_default = True
+    deterministic_req = request.data.get('deterministic') if isinstance(request.data, dict) else None
+    if deterministic_req is not None:
+        try:
+            deterministic = bool(False if str(deterministic_req) in ("0", "false", "False") else deterministic_req)
+        except Exception:
+            deterministic = deterministic_default
+    else:
+        deterministic = deterministic_default
+    res = provider.write(section_id=section_id, answers=answers, file_refs=file_refs or None, deterministic=deterministic)  # type: ignore[arg-type]
     # (single-write marker already set at entry)
     dt_ms = int((time.time() - t0) * 1000)
     from .models import AIMetric
@@ -343,7 +357,25 @@ def revise(request):
                 change_request = change_request + addition
     except Exception:
         pass
-    res = provider.revise(base_text=base_text, change_request=change_request, file_refs=file_refs or None)
+    deterministic_setting = getattr(settings, 'AI_DETERMINISTIC_SAMPLING', True)
+    try:
+        deterministic_default = bool(False if str(deterministic_setting) in ("0", "false", "False") else deterministic_setting)
+    except Exception:
+        deterministic_default = True
+    deterministic_req = request.data.get('deterministic') if isinstance(request.data, dict) else None
+    if deterministic_req is not None:
+        try:
+            deterministic = bool(False if str(deterministic_req) in ("0", "false", "False") else deterministic_req)
+        except Exception:
+            deterministic = deterministic_default
+    else:
+        deterministic = deterministic_default
+    res = provider.revise(
+        base_text=base_text,
+        change_request=change_request,
+        file_refs=file_refs or None,
+        deterministic=deterministic,
+    )  # type: ignore[arg-type]
     dt_ms = int((time.time() - t0) * 1000)
     from .models import AIMetric
     # Record change_request as memory snippet (tagged by section)
@@ -407,12 +439,17 @@ def format(request):
     # Deterministic sampling toggle (default on for stable exports)
     deterministic_setting = getattr(settings, 'AI_DETERMINISTIC_SAMPLING', True)
     try:
-        if isinstance(deterministic_setting, str):  # allow env var strings
-            deterministic = deterministic_setting not in ("0", "false", "False")
-        else:
-            deterministic = bool(deterministic_setting)
+        deterministic_default = bool(False if str(deterministic_setting) in ("0", "false", "False") else deterministic_setting)
     except Exception:
-        deterministic = True
+        deterministic_default = True
+    deterministic_req = request.data.get('deterministic') if isinstance(request.data, dict) else None
+    if deterministic_req is not None:
+        try:
+            deterministic = bool(False if str(deterministic_req) in ("0", "false", "False") else deterministic_req)
+        except Exception:
+            deterministic = deterministic_default
+    else:
+        deterministic = deterministic_default
     res = provider.format_final(
         full_text=full_text,
         template_hint=template_hint or None,

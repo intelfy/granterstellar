@@ -1,6 +1,7 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from proposals.models import Proposal
+from orgs.models import Organization
 from exports.utils import (
     proposal_json_to_markdown,
     render_pdf_from_text,
@@ -23,8 +24,10 @@ class ExportDeterminismTests(TestCase):
     def setUp(self):
         U = get_user_model()
         self.user = U.objects.create_user(username="e", password="p")
+        self.org = Organization.objects.create(name="ExpOrg", admin=self.user)
         self.proposal = Proposal.objects.create(
             author=self.user,
+            org=self.org,
             content={
                 "meta": {"title": "Deterministic"},
                 "sections": {

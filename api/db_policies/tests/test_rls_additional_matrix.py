@@ -65,10 +65,11 @@ class RLSAdditionalMatrixTests(TestCase):
         set_guc(self.adminA.id, self.orgA.id, "admin")
         p_new = Proposal.objects.create(author=self.adminA, org=self.orgA, content={"t": "A2"})
         self.assertIsNotNone(p_new.id)
-        # Downgrade role GUC to user (simulating future stricter policy); insertion should now fail
+        # Downgrade role GUC to user; insertion should now fail under stricter policy (requires role=admin)
         if connection.vendor == "postgresql":
             from django.db import ProgrammingError
-            with self.assertRaises(ProgrammingError):  # Expect stricter policy to block non-admin insert
+            set_guc(self.adminA.id, self.orgA.id, "user")
+            with self.assertRaises(ProgrammingError):
                 with transaction.atomic():
                     Proposal.objects.create(author=self.adminA, org=self.orgA, content={"t": "A3"})
 

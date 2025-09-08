@@ -34,7 +34,7 @@ See also:
 - Proposals WRITE: personal by author; org-scoped by org admin.
 - OrgUser: READ self; INSERT/UPDATE/DELETE by org admin or when `(current_role='admin' and current_org_id=org_id)`.
 - Organizations: INSERT (allowed; visibility via SELECT policy), DELETE by admin.
-- Subscriptions: owner_user or org admin of owner_org.
+- Subscriptions: owner_user or org admin of owner_org for write; read also allowed for any org member via `subscriptions_read_members` (SELECT-only) policy to surface accurate usage limits without granting modification rights.
 - FORCE RLS enabled on orgs_organization, orgs_orguser, proposals_proposal, billing_subscription.
 - Policies in `db_policies/migrations/0001_rls.py` (+ subsequent migrations 0002–0009). Postgres-only tests in `db_policies/tests/*` (skipped on SQLite).
 

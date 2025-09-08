@@ -222,7 +222,12 @@ def stripe_webhook(request):
 
         # If neither metadata present, try to infer from existing subscription by stripe ids
         cust_id = data.get('customer') or ''
-        sub_id = data.get('id') or data.get('subscription') or ''
+        # For checkout.session objects, prefer the linked subscription id over the session id so that
+        # subsequent invoice/ subscription events referencing the subscription maintain continuity.
+        if data.get('object') == 'checkout.session' and data.get('subscription'):
+            sub_id = data.get('subscription')
+        else:
+            sub_id = data.get('id') or data.get('subscription') or ''
         status = status_override or data.get('status') or 'active'
         current_period_end = _epoch_to_dt(data.get('current_period_end'))
         cancel_at_period_end = bool(data.get('cancel_at_period_end')) if 'cancel_at_period_end' in data else None
@@ -292,6 +297,14 @@ def stripe_webhook(request):
             sub.cancel_at_period_end = cancel_at_period_end
         # Seats/quantity detection (robust)
         qty = _extract_qty_from_obj(data)
+        # If still None and we are handling a checkout.session, try explicit metadata.quantity again (some payloads may not pass earlier heuristics)
+        if qty is None and data.get('object') == 'checkout.session':
+            try:
+                meta_q = int((data.get('metadata') or {}).get('quantity') or (data.get('metadata') or {}).get('seats') or 0)
+                if meta_q >= 0:
+                    qty = meta_q
+            except Exception:
+                qty = None
         if isinstance(qty, int) and qty >= 0:
             sub.seats = qty
         # Track discount changes for audit/diagnostics

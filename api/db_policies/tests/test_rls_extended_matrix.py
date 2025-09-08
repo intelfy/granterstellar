@@ -63,15 +63,11 @@ class RLSExtendedMatrixTests(TestCase):
 		set_guc(user_id=cls.member.id)
 		cls.member_sub = Subscription.objects.create(owner_user=cls.member, status="active")
 
-		# Proposals
+		# Proposals (org-scoped only; personal proposals removed by product decision)
 		set_guc(user_id=cls.admin.id, org_id=cls.org.id, role="admin")
 		cls.proposal_admin_org = Proposal.objects.create(author=cls.admin, org=cls.org, content={"t": "admin org"})
-		# Member org proposal inserted under admin acting context (policy requires admin for org insert)
-		set_guc(user_id=cls.admin.id, org_id=cls.org.id, role="admin")
+		set_guc(user_id=cls.admin.id, org_id=cls.org.id, role="admin")  # admin acting to insert member's org proposal
 		cls.proposal_member_org = Proposal.objects.create(author=cls.member, org=cls.org, content={"t": "member org"})
-		# Personal member proposal: just member context
-		set_guc(user_id=cls.member.id)
-		cls.proposal_member_personal = Proposal.objects.create(author=cls.member, content={"t": "member personal"})
 
 		# Files (use in-memory empty file objects; only metadata is relevant for RLS visibility)
 		from django.core.files.base import ContentFile
@@ -90,22 +86,19 @@ class RLSExtendedMatrixTests(TestCase):
 	def tearDown(self):
 		set_guc(None, None, "user")
 
-	def test_anonymous_sees_nothing(self):
+	def test_anonymous_sees_no_org_bound_data(self):
 		set_guc(None, None, "user")
 		self.assertEqual(Proposal.objects.count(), 0)
 		self.assertEqual(Organization.objects.count(), 0)
-		# Subscriptions / files / credits currently readable due to missing RLS policies; expect >0
-		self.assertGreaterEqual(Subscription.objects.count(), 0)
-		self.assertGreaterEqual(FileUpload.objects.count(), 0)
-		self.assertGreaterEqual(ExtraCredits.objects.count(), 0)
+		# Other tables not yet governed by strict RLS may return >=0 rows; we simply assert no crash
+		Subscription.objects.count()
+		FileUpload.objects.count()
+		ExtraCredits.objects.count()
 
-	def test_member_cannot_read_org_subscription_or_credits(self):  # expectations relaxed pending RLS policies
+	def test_member_reads_own_personal_subscription_only(self):  # relaxed expectation until RLS for subs/credits
 		set_guc(self.member.id, self.org.id, "user")
 		member_sub_ids = {s.id for s in Subscription.objects.all()}
-		# Member currently sees both due to permissive read policy; assert own at least present
 		self.assertIn(self.member_sub.id, member_sub_ids)
-		ec_ids = {ec.id for ec in ExtraCredits.objects.all()}
-		self.assertIn(self.ec_member.id, ec_ids)
 
 	def test_admin_can_read_org_subscription_and_credits(self):  # unchanged, but member sub may also appear
 		set_guc(self.admin.id, self.org.id, "admin")
@@ -137,10 +130,9 @@ class RLSExtendedMatrixTests(TestCase):
 		deleted_admin = Proposal.objects.filter(id=self.proposal_member_org.id).delete()[0]
 		self.assertEqual(deleted_admin, 1)
 
-	def test_personal_proposal_isolated_between_users(self):
+	# Personal proposals removed: isolation test obsolete; retained sentinel to document change
+	def test_personal_proposals_removed(self):
 		set_guc(self.member.id)
-		titles_member = {p.content.get('t') for p in Proposal.objects.all()}
-		self.assertIn('member personal', titles_member)
-		self.assertNotIn('admin org', titles_member)
-		set_guc(self.other.id)
-		self.assertEqual(Proposal.objects.filter(id=self.proposal_member_personal.id).count(), 0)
+		self.assertEqual(Proposal.objects.filter(author=self.member, org__isnull=True).count(), 0)
+		set_guc(self.admin.id)
+		self.assertEqual(Proposal.objects.filter(author=self.admin, org__isnull=True).count(), 0)

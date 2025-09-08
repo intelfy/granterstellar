@@ -88,10 +88,45 @@ When adding new RLS-governed models:
 Rationale: Emphasizing negative paths helps ensure least-privilege integrity and reduces accidental broadening of policies during refactors.
 
 ```bash
-# Example (adjust as needed)
+# Manual example (adjust as needed)
 export DATABASE_URL=postgresql://USER:PASS@localhost:5432/DB
 DEBUG=1 SECRET_KEY=test python manage.py test -v 2 db_policies.tests
 ```
+
+### Zero-effort local workflow (VS Code tasks)
+
+Two predefined tasks simplify starting Postgres and running the RLS test suite without leaving the editor:
+
+1. `Services: up db`
+
+  - Runs: `docker compose -f app-compose.yml up -d db`
+  - Brings up only the Postgres service (data persisted in the `db-data` volume).
+  - Use this if you want to keep the database running across multiple test invocations.
+
+1. `RLS: up db + test`
+
+  - One-shot aggregate: starts the database, waits for readiness, runs `db_policies.tests`, then tears everything down (including volumes) to avoid residue.
+  - Command (embedded in `.vscode/tasks.json`):
+
+    ```bash
+    docker compose -f app-compose.yml up -d db \
+     && for i in $(seq 1 30); do pg_isready -h 127.0.0.1 -p 5432 -U appuser >/dev/null 2>&1 && break || sleep 1; done \
+     && DEBUG=1 SECRET_KEY=test DATABASE_URL=postgresql://appuser:changeme2@127.0.0.1:5432/granterstellar \
+       python manage.py test -v 2 db_policies.tests \
+     && docker compose -f app-compose.yml down -v --remove-orphans
+    ```
+
+  - Exit code from the Django test run is preserved (task fails if tests fail).
+
+Recommendations:
+
+- Use `RLS: up db + test` for clean, isolated policy test runs (CI-like).
+- Use `Services: up db` + the existing `API: test (RLS on Postgres)` task when iterating repeatedly and you prefer to keep the container warm.
+
+Environment assumptions for tasks:
+
+- `.env` supplies `POSTGRES_DB`, `POSTGRES_USER=appuser`, `POSTGRES_PASSWORD=changeme2` (align with `DATABASE_URL`).
+- If you change credentials, update both the `.env` file and the tasks reference.
 
 ## Troubleshooting
 
