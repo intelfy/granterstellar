@@ -13,6 +13,7 @@ from django.db import transaction
 
 from .models import AIResource, AIChunk
 from .embedding_service import embed_texts
+from .retrieval import _cosine  # reuse cosine similarity
 
 
 def _clean_html(html: str) -> str:
@@ -55,11 +56,62 @@ def _dedup_key(text: str) -> str:
 
 
 @transaction.atomic
-def create_resource_with_chunks(*, type_: str, title: str, source_url: str, full_text: str) -> AIResource:
+def create_resource_with_chunks(
+    *,
+    type_: str,
+    title: str,
+    source_url: str,
+    full_text: str,
+    similarity_threshold: float = 0.97,
+) -> AIResource:
     sha256 = AIResource.compute_sha256(full_text)
     existing = AIResource.objects.filter(sha256=sha256, type=type_).first()
     if existing:
         return existing
+
+    # Similarity-based dedupe (phase 1 heuristic): compare first chunk embedding to existing
+    # resources of same type. If cosine >= threshold → reuse existing resource.
+    # Lightweight: only embed first prospective chunk before full processing.
+    prospective_chunks = _chunk_text(full_text)
+    if not prospective_chunks:
+        prospective_chunks = [full_text[:800]]
+    first_chunk = prospective_chunks[0]
+    first_vec = embed_texts([first_chunk])[0]
+    # Adjust threshold for deterministic hash backend (coarse). Hash vectors can
+    # yield lower cosine for small textual variants; widen window slightly.
+    from .embedding_service import EmbeddingService  # local import to avoid cycle in apps
+    if EmbeddingService.instance().backend == "hash" and similarity_threshold >= 0.95:
+        adj_threshold = 0.90
+    else:
+        adj_threshold = similarity_threshold
+    if adj_threshold < 1.0:  # allow disabling by passing 1.0
+        # Iterate limited candidate set (same type, last 200 for recency bias)
+        candidate_qs = AIResource.objects.filter(type=type_).order_by("-id")[:200]
+        candidate_ids = list(candidate_qs.values_list("id", flat=True))
+        if candidate_ids:
+            chunk_map: dict[int, AIChunk] = {}
+            for c in AIChunk.objects.filter(resource_id__in=candidate_ids, ord=0):  # type: ignore[attr-defined]
+                if c.embedding:  # ensure embedding present
+                    chunk_map[c.resource_id] = c  # type: ignore[attr-defined]
+            for cand_id in candidate_ids:
+                ch0 = chunk_map.get(cand_id)
+                if not ch0:
+                    continue
+                # Fast textual near-duplicate heuristic (prefix delta <32 chars)
+                t_existing = (ch0.text or "")
+                s1, s2 = t_existing.strip(), first_chunk.strip()
+                shorter, longer = (s1, s2) if len(s1) <= len(s2) else (s2, s1)
+                if shorter and longer.startswith(shorter) and (len(longer) - len(shorter) < 32):
+                    existing_sim = next((r for r in candidate_qs if getattr(r, "id", None) == cand_id), None)
+                    if existing_sim:
+                        return existing_sim
+                if not ch0.embedding:  # defensive
+                    continue
+                sim = _cosine(first_vec, ch0.embedding)
+                if sim >= adj_threshold:
+                    existing_sim = next((r for r in candidate_qs if getattr(r, "id", None) == cand_id), None)
+                    if existing_sim:
+                        return existing_sim
     resource = AIResource.objects.create(
         type=type_,
         title=title[:256],
@@ -67,7 +119,7 @@ def create_resource_with_chunks(*, type_: str, title: str, source_url: str, full
         sha256=sha256,
         metadata={"dedup": True},
     )
-    chunks = _chunk_text(full_text)
+    chunks = prospective_chunks  # reuse already chunked result
     embeddings = embed_texts(chunks)
     created = 0
     for idx, (chunk_text, vec) in enumerate(zip(chunks, embeddings)):
