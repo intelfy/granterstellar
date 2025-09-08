@@ -14,6 +14,6 @@ djangorestframework-simplejwt==5.5.1
 reportlab==4.2.2
 python-docx==1.1.2
 ruff==0.6.9
-pdfminer.six==20240706
+pdfminer.six==20250506
 PyYAML==6.0.2
 requests==2.32.3
