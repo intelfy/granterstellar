@@ -1,5 +1,21 @@
 from django.contrib import admin
-from .models import AIJob, AIMetric
+from .models import AIResource, AIChunk, AIJob, AIMetric
+
+
+@admin.register(AIResource)
+class AIResourceAdmin(admin.ModelAdmin):
+    list_display = ("id", "type", "title", "source_url", "created_at")
+    search_fields = ("title", "source_url", "type", "sha256")
+    list_filter = ("type", "created_at")
+    date_hierarchy = "created_at"
+
+
+@admin.register(AIChunk)
+class AIChunkAdmin(admin.ModelAdmin):
+    list_display = ("id", "resource", "ord", "token_len", "created_at")
+    search_fields = ("text", "embedding_key")
+    list_filter = ("created_at",)
+    raw_id_fields = ("resource",)
 
 
 @admin.register(AIJob)

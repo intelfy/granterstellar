@@ -57,9 +57,19 @@ def _dedup_key(text: str) -> str:
 @transaction.atomic
 def create_resource_with_chunks(*, type_: str, title: str, source_url: str, full_text: str) -> AIResource:
     sha256 = AIResource.compute_sha256(full_text)
-    resource = AIResource.objects.create(type=type_, title=title[:256], source_url=source_url, sha256=sha256, metadata={})
+    existing = AIResource.objects.filter(sha256=sha256, type=type_).first()
+    if existing:
+        return existing
+    resource = AIResource.objects.create(
+        type=type_,
+        title=title[:256],
+        source_url=source_url,
+        sha256=sha256,
+        metadata={"dedup": True},
+    )
     chunks = _chunk_text(full_text)
     embeddings = embed_texts(chunks)
+    created = 0
     for idx, (chunk_text, vec) in enumerate(zip(chunks, embeddings)):
         AIChunk.objects.create(
             resource=resource,
@@ -70,6 +80,10 @@ def create_resource_with_chunks(*, type_: str, title: str, source_url: str, full
             embedding=vec,
             metadata={},
         )
+        created += 1
+    # Attach simple ingestion stats
+    if created:
+        AIResource.objects.filter(pk=resource.pk).update(metadata={"chunks": created})
     return resource
 
 
@@ -77,7 +91,12 @@ def ingest_grant_call(url: str) -> AIResource:
     resp = requests.get(url, timeout=15)
     resp.raise_for_status()
     cleaned = _clean_html(resp.text)
-    return create_resource_with_chunks(type_="call_snapshot", title="Grant Call", source_url=url, full_text=cleaned)
+    return create_resource_with_chunks(
+        type_="call_snapshot",
+        title="Grant Call",
+        source_url=url,
+        full_text=cleaned,
+    )
 
 
 def ingest_manifest(yaml_text: str) -> list[AIResource]:
@@ -92,7 +111,9 @@ def ingest_manifest(yaml_text: str) -> list[AIResource]:
             url = it.get("source_url", "")
             if not type_ or not text:
                 continue
-            created.append(create_resource_with_chunks(type_=type_, title=title, source_url=url, full_text=text))
+            res = create_resource_with_chunks(type_=type_, title=title, source_url=url, full_text=text)
+            if res not in created:  # avoid duplicates in return list
+                created.append(res)
         except Exception:
             continue
     return created
