@@ -94,6 +94,31 @@ Environment, security, and operations
 - API: run Django tests per app (e.g., `python manage.py test -v 2 accounts`); determinism tests verify exports.
 - Web: ESLint (flat config) and Vitest.
 - Build hardening: no source maps in prod; console/debugger stripped; CSP enforced.
+- Dependency/security: optional `scripts/deps_audit.sh` runs pip-audit + npm audit + SBOM generation when supporting tools are installed (non-fatal if missing).
+- Automated audits: GitHub Actions workflow (`.github/workflows/deps_audit.yml`) runs weekly and on PRs – executes pip-audit (JSON), Bandit, npm audit (--json), and CycloneDX SBOM generation for Python & JS. Artifacts (reports + SBOMs) are uploaded; the job fails on HIGH/CRITICAL vulns (precise severity parsing WIP). Use the local `scripts/deps_audit.sh` for ad-hoc verification.
+
+## Health & readiness endpoints
+
+The API exposes lightweight JSON probes:
+
+- `GET /api/health` — liveness (always 200 if process/thread responding)
+- `GET /api/ready` — readiness (verifies DB connectivity and cache availability). On failure returns a standardized error payload:
+
+```json
+{
+  "error": { "code": "not_ready", "message": "database_unreachable", "version": 1, "meta": { /* optional */ } }
+}
+```
+
+Use `/api/health` for basic uptime monitors and `/api/ready` for deploy rollouts / load balancer target health. The readiness endpoint purposefully exercises a trivial DB query; extend it if future dependencies (e.g. external vector store) become launch‑critical.
+
+## AI gating & rate limiting (summary)
+
+## Performance tweaks
+
+Added early font + script preload hints on landing (`index.html`) and module/font preloads in SPA (`web/index.html`). Future step: capture before/after Web Vitals (LCP/TTI) once staging deployed; tighten budgets afterward.
+
+Centralized in a decorator (`ai_protected`) wrapping AI endpoints. Layers: plan gating → deterministic single‑write debug guard → cache fast path → DB authoritative count. See `docs/ai_rate_limiting.md` for deep dive (now updated with decorator + cache fast path details).
 
 ## Notes
 

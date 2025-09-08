@@ -1,0 +1,56 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "UTC"
+    labels: ["deps", "ci"]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:30"
+      timezone: "UTC"
+    labels: ["deps", "javascript"]
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-type: "direct"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+      dev-deps:
+        patterns: ["@testing-library/*", "vitest", "vite", "@vitejs/*", "eslint", "rollup-plugin-visualizer", "terser"]
+  - package-ecosystem: "pip"
+    directory: "/api"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "UTC"
+    labels: ["deps", "python"]
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-type: "direct"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    insecure-external-code-execution: deny
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+      security-fixes:
+        applies-to: security-updates
+        update-types: ["patch", "minor", "major"]

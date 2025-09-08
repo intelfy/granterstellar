@@ -6,7 +6,7 @@ PURPOSE: ['Outline current priorities', 'Detail next steps', 'Track remaining is
 PRIORITY: 'CRITICAL'
 [[/AI_CONFIG]]
 
-# Granterstellar — Engineering Plan (updated 2025-09-01)
+# Granterstellar — Engineering Plan (updated 2025-09-08)
 
 Source of truth for product/architecture: `.github/copilot-instructions.md` and `docs/README.md` (install/security/ops details in `docs/*`). This file tracks current priorities and gaps only.
 
@@ -27,21 +27,33 @@ Legend: [ ] todo, [~] in progress, [x] done
 
 ### 2. RLS coverage and DB hardening
 
-- [~] Expand Postgres-only matrix (creator/admin/member/anon) and document least-privileged DB user + migration policy notes in docs.
+- [x] Expanded Postgres-only matrix (creator/admin/member/anon + usage endpoint) — new `db_policies/tests/test_rls_usage_endpoint.py` covers `/api/usage` HTTP-level RLS. Least-privileged DB user + migration ownership guidance documented in `docs/rls_postgres.md` (sections: "Least-privileged DB user" and "Least Privilege & Migration Ownership").
 
 ### 3. Ops and monitoring
 
-- [x] Minimal health/monitor endpoint `/api/healthz` added; review logs and runbook still pending.
-- [ ] Re-run dependency/SAST scans and capture deltas (document compensating controls; add minimal suppressions if justified).
+- [x] Minimal liveness `/api/health` and readiness `/api/ready` endpoints added; runbook & README updated.
+- [~] Re-run dependency/SAST scans and capture deltas (infrastructure & automation added; pending: formal triage doc + suppressions rationale if needed).
 
 ## 4. AI providers
 
-- [ ] Safety filters (max tokens, plan rate limits)
-- [ ] Deterministic sampling toggles for export-critical runs
+- [~] Safety filters (implemented: per-minute rpm, daily request cap, monthly token cap; tests in `ai/tests/test_ai_caps.py`; deployment guide updated with env vars; pending: deterministic sampling toggle + provider timeout/retry + prompt shield + pre-execution token projection to block before provider call). New env vars:
+  - AI_RATE_PER_MIN_FREE / AI_RATE_PER_MIN_PRO / AI_RATE_PER_MIN_ENTERPRISE
+  - AI_DAILY_REQUEST_CAP_FREE / AI_DAILY_REQUEST_CAP_PRO / AI_DAILY_REQUEST_CAP_ENTERPRISE
+  - AI_MONTHLY_TOKENS_CAP_PRO / AI_MONTHLY_TOKENS_CAP_ENTERPRISE
+  - AI_ENFORCE_RATE_LIMIT_DEBUG=1 (enforce in DEBUG for local testing)
+  Response headers on 429: Retry-After, X-AI-Daily-(Cap|Used), X-AI-Monthly-Token-(Cap|Used) as applicable.
+- [~] Deterministic sampling toggle for export-critical runs (env: `AI_DETERMINISTIC_SAMPLING`, default True; affects `/api/ai/format` deterministic flag). Pending: extend to write/revise variance controls if needed.
 - [ ] RAG store (templates/samples); curate initial self-hosted set
 - [ ] Prepare batch task & prompts for Gemini-2.5-Flash to twice a week search web for templates and successful/winning proposal samples for common grant calls we don't currently have templates for and integrate them into the RAG. Files should be categorized as either samples or templates. Log all new files added.
 - [ ] Implement AI/user interaction flow: The user provides the open call they're applying for --> The planner (using web search to review the user's input URL for the open call and compares against templates/samples in the RAG) determines what sections will be needed and what information should be prefilled (drawing also from the organization metadata like name/description) and what questions to ask the user per section --> The writer parses the user's answers per section and fleshes out the section for review/revision until user approves --> the user is asked the next set of questions for the next section --> the writer repeats --> ... --> once all pre-planned sections are done, the user approves the text a final time, before the formatter structures it (prioritizing a good looking PDF formatting) according to a template (if one exists) or inference and similar sample writing and web search grounding (if a template does not exist) --> Formatter presents a mockup of the final .PDF versio of the file, formatted to closely resemble the templates/samples in layout --> The user exports the formatted file in their chosen extension, (or opens the editor and is asked which section they would like to edit, and whether they would like to edit the raw text manually or rerun the AI interactions for that section)
-- [ ] Implement AI memory per user (user uploads persisted in "My files" unless deleted, commonly given user answers persisted in database and suggested on sections - such as the user giving a budget in one proposal and it being suggested automatically when writing the next - etc.)
+- [x] Implement AI memory per user/org (model `AIMemory` + suggestions endpoint `/api/ai/memory/suggestions`) with automatic capture on write/revise and integration into provider prompt context.
+  - Storage: Idempotent dedup via `(created_by, org_id, key_hash, value_hash)` uniqueness; per‑scope retrieval with strict isolation (org memories excluded from personal unless `X-Org-ID` header supplied).
+  - Prompt integration (2025-09-08): `write` injects top (limit 3) suggestions under reserved answer key `_memory_context` as a `[context:memory]` block; `revise` appends `[context:memory]` block to `change_request`. Underscore key prevents recursive persistence.
+  - Frontend: Hook `useAIMemorySuggestions` + `MemorySuggestions` component already surfaced in AuthorPanel (chips → click to insert); tests in `ai-memory-suggestions.test.jsx` (section filter, org filter, limit, empty token, refresh) all passing.
+  - Tests: Added `test_memory_prompting.py` (write/revise inclusion + absence when none). AI test suite now 37 tests green (was 34). Web suite 18 files / 30 tests green.
+  - Observability: Future enhancement could expose whether memory context applied via response metadata header (deferred).
+  - NOTE (flake observed once pre-final code): A single transient failure of `test_org_scope_isolated_from_personal` (org memory leaked to personal) during an earlier run before final code reload; not reproducible after latest changes. Added follow-up backlog item to monitor.
+  - Follow-up (backlog): configurable token truncation (currently value[:400]), per-key weighting, and provider contract evolution to accept structured memory context separately from answers.
 
 ### 5. Performance & optimization (pre-deploy)
 
@@ -100,7 +112,7 @@ Legend: [ ] todo, [~] in progress, [x] done
 
 - Containers & builds
   - [ ] Verify Dockerfiles build successfully in Coolify (multi-stage where applicable); ensure only runtime artifacts ship
-  - [ ] API image sanity: `DEBUG=0`, required envs present, correct port exposed, healthcheck path wired (e.g., `/api/healthz`)
+  - [ ] API image sanity: `DEBUG=0`, required envs present, correct port exposed, healthcheck paths wired (`/api/health` liveness, `/api/ready` readiness)
   - [ ] Optional: build API with `STRIP_PY=1` and confirm no `.py` in final image (keeps IP hardening aligned)
   - [ ] SPA build stage outputs hashed assets under `/static/app/` with base `/app`; confirm no source maps
 
@@ -108,7 +120,7 @@ Legend: [ ] todo, [~] in progress, [x] done
   - [ ] Define services: API, SPA static (or landing), Postgres, optional Redis (Celery/async)
   - [ ] Attach Traefik routes for `/`, `/app`, `/api`, `/static/app/`, `/media/` as per routing map
   - [ ] Configure environment variables (PROD) end-to-end (see list below); validate via Coolify variables UI
-  - [ ] Health checks: API GET `/api/healthz`; static GET `/` (or `/app/`)
+  - [ ] Health checks: API GET `/api/health`; readiness GET `/api/ready`; static GET `/` (or `/app/`)
 
 - PROD environment variables (must set)
   - [ ] Core: `SECRET_KEY`, `ALLOWED_HOSTS`, `PUBLIC_BASE_URL`, `DATABASE_URL`, `REDIS_URL` (if async)
@@ -216,9 +228,9 @@ Dependency & Supply Chain
 
 - [ ] Add Python constraints/lock (pip-tools compile → requirements.txt + constraints.txt)
 - [ ] Commit npm lockfile and enforce `npm ci` (update Docker build)
-- [ ] CI: add pip-audit & npm audit (prod deps) failing on HIGH/CRITICAL
-- [ ] Weekly automated dependency updates (Dependabot/Renovate)
-- [ ] Generate SBOM (CycloneDX) for Python & JS in CI and archive artifact
+- [x] CI: add pip-audit & npm audit (prod deps) failing on HIGH/CRITICAL (heuristic gating v1; precise JSON severity parsing task open)
+- [x] Weekly automated dependency updates (Dependabot config at `.github/dependabot.yml` — grouped minor/patch + dev deps)
+- [x] Generate SBOM (CycloneDX) for Python & JS in CI and archive artifact
 - [ ] Document dependency triage workflow in `docs/ops_runbook.md`
 
 API Hardening & Auth
