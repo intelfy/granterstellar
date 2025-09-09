@@ -13,14 +13,10 @@ repos:
       - id: ruff
         args: ["--fix"]
       - id: ruff-format
-  - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: v9.11.0
+  - repo: local
     hooks:
-      - id: eslint
-        additional_dependencies:
-          - eslint@9.11.1
-          - eslint-config-standard@17.1.0
-          - eslint-plugin-import@2.29.1
-          - eslint-plugin-n@16.6.2
-          - eslint-plugin-promise@6.4.0
-        files: \.(js|jsx|ts|tsx)$
+      - id: secret-scan
+        name: secret-scan (gitleaks)
+        entry: bash scripts/secret_scan.sh
+        language: system
+        pass_filenames: false

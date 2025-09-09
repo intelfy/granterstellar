@@ -30,3 +30,21 @@ Welcome! This project favors concise, accurate docs and tests. Start here:
 
 ## Reporting security issues
 - Do not open public issues. See `.github/SECURITY.md` for our policy.
+
+## Secrets & Environment Hygiene
+
+Never commit real secrets. All runtime credentials must come from environment variables loaded via `.env` (which is gitignored) or your deployment platform.
+
+Before pushing:
+
+1. Run `bash scripts/secret_scan.sh` (wraps gitleaks staged + full repo scan).
+2. Run `python api/manage.py env_doctor --strict` to validate required env keys (in CI this should also run).
+3. Confirm any newly added UI strings follow the localization workflow (`locales/en.yml` + regenerate keys).
+
+If a secret leaks:
+
+- Rotate the credential immediately in the upstream provider.
+- Remove the secret from git history (filter-repo) only if compliance requires; otherwise rely on rotation.
+- Document the rotation (internal log) with date/time and reason.
+
+Local `.vscode/`, `.env*`, and other ignored files may contain secrets—keep them private. The repository includes `.gitleaks.toml` to reduce false positives; adjust allowlist sparingly.

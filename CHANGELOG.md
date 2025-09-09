@@ -6,6 +6,33 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Localization (UI Keys Insertion Workflow)
+
+All user-visible UI text must come from `locales/en.yml` and be accessed via the generated translator.
+
+Workflow:
+
+1. Add/modify keys in `locales/en.yml` (nest under `ui.*` namespaces; keep logical grouping e.g. `ui.dashboard.*`, `ui.billing.*`).
+2. Regenerate keys: `node scripts/build_keys.mjs` (writes `web/src/keys.generated.ts`). Never edit the generated file manually.
+3. Use in code: `import { t } from '../keys.generated'` then `t('ui.namespace.key', { optional: 'params' })`.
+4. Replace raw user-facing literals immediately; allow TEMP raw strings only if marked with `// TODO i18n` (should not reach commit without conversion).
+5. For interpolations, ensure placeholders exist in YAML: `section_counter: "Section {current} of {total}"` then call with params object.
+6. Commit both the YAML and regenerated `keys.generated.ts` together.
+7. Update tests: replace literal expectations with either the translated string or (preferably) the key-driven output if stable.
+
+Rules / Guardrails:
+
+- No direct `KEYS` map access inside components (prevents test race conditions); rely on `t()` which safely falls back to the key string.
+- Do not remove or rename a key without searching usages; rename in a single commit to avoid stale references.
+- Missing key at runtime returns the key string itself—treat as a defect and add the YAML entry.
+- Keep key names descriptive (avoid cryptic abbreviations).
+- Keep interpolation placeholder names lowercase and meaningful.
+
+Planned CI (future):
+
+- Lint rule forbidding new raw English literals in `web/src` except test files.
+- Deterministic check ensuring `keys.generated.ts` matches `locales/en.yml`.
+
 ### Added
 
 - Revision cap enforcement refinements:
@@ -141,24 +168,24 @@ This archive captures the detailed status snapshot, recently completed items, an
 ### Performance & Optimization Plan (Pre-Slimdown)
 
 Web Build / Bundling:
- 
+
 - Route-level code splitting implemented; further preload & bundle budget tasks pending.
 - Baseline (2025-09-01 local): total gzipped JS ≈ 59.8 KB; largest chunk vendor-react ≈ 43.7 KB.
 
 Runtime Client:
- 
+
 - Planned: debounce autosaves/search, in-memory cache (SWR style), list virtualization, navigation cleanup.
 
 API Efficiency:
- 
+
 - Planned: ensure pagination + indexes, short-lived Redis caches, batch bootstrap endpoint.
 
 Infra / Delivery:
- 
+
 - Planned: gzip/br + immutable hashed assets, optional CDN.
 
 Guardrails & SLOs:
- 
+
 - Targets (proposed): p95 TTI < 2.5s, main bundle < 180KB gzip, TBT < 200ms.
 
 ### Security / Auth Backlog (Archived Detail)
@@ -215,4 +242,3 @@ Phases: inventory script, key namespace design, minimal `t()` runtime, messages 
 ### Rationale for Slimdown
 
 The above details provided valuable planning fidelity but introduced cognitive overhead. They are preserved verbatim here to avoid knowledge loss while enabling a lean, execution-focused `Todo.md` centered on the Alpha Critical Path and a concise Alpha→MVP backlog.
-

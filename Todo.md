@@ -12,6 +12,35 @@ Source of truth for product/architecture: `.github/copilot-instructions.md` and 
 
 Legend: [ ] todo, [~] in progress, [x] done
 
+## Localization Workflow (UI Text Enforcement)
+
+All user-visible strings must originate from `locales/en.yml` and be accessed with `t()` from the generated `keys.generated.ts`.
+
+Actionable Checklist (follow in every PR introducing UI copy):
+
+1. Add new key under appropriate namespace (e.g. `ui.dashboard.*`, `ui.billing.*`) inside `locales/en.yml`.
+2. Run key generator: `node scripts/build_keys.mjs` (regenerates `web/src/keys.generated.ts`). Never edit the generated file manually.
+3. Import and use: `import { t } from '../keys.generated'` then `t('ui.namespace.key', { optional: 'param' })`.
+4. Replace any temporary literal with the translation immediately (only acceptable placeholder: literal marked `// TODO i18n` in same commit—should not persist to main).
+5. For dynamic values, define placeholders in YAML (e.g. `section_counter: "Section {current} of {total}"`). Call with params object.
+6. Update/adjust affected tests to reference the translated output (avoid hard-coding raw English literals unless intentionally asserting fallback behavior).
+7. Commit BOTH the YAML and regenerated `keys.generated.ts` together (single commit to keep them in sync).
+8. If renaming/removing a key, search usages and migrate in the same commit; never leave stale keys.
+
+Guardrails / Future CI:
+
+- Will add lint rule to block new raw English literals in `web/src` (excluding tests) once coverage stabilizes.
+- Planned check to diff `locales/en.yml` vs `keys.generated.ts` and fail if out-of-sync.
+- Runtime fallback (missing key returns key name) treated as a defect—add the YAML entry promptly.
+
+Open Tasks (Localization):
+
+- [ ] Implement ESLint rule (custom or plugin) forbidding raw string literals matching English word regex outside `*.test.*`.
+- [ ] Add CI script: regenerate keys then git diff --exit-code to enforce sync.
+- [ ] Author `docs/i18n.md` (after alpha stabilization) consolidating strategy + multi-locale roadmap.
+- [ ] Add unit test asserting `t('__missing.fake_key__') === '__missing.fake_key__'` (fallback contract) to detect accidental behavior changes.
+- [ ] Script to detect orphaned keys (present in YAML, unused in code) for periodic cleanup.
+
 ## Assumptions & Constraints (Alpha Focus)
 
 Scope assumptions for the immediate Alpha Critical Path. Adjust here before coding if any change in product direction.

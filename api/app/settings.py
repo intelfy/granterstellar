@@ -4,7 +4,10 @@ import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
+# Development-only fallback. NEVER rely on this in production; prod guard below enforces override.
+SECRET_KEY = os.getenv('SECRET_KEY', 'insecure-development-key-change-me')
+# Dedicated JWT signing key; MUST be set and distinct in production for rotation/isolation.
+JWT_SIGNING_KEY = os.getenv('JWT_SIGNING_KEY')
 
 # Secure-by-default: DEBUG off unless explicitly enabled
 DEBUG = os.getenv('DEBUG', '0') == '1'
@@ -82,6 +85,7 @@ DATABASES = {
 
 # Flag when running tests (used for safe relaxations in test-only code paths)
 import sys
+
 TESTING = 'test' in sys.argv
 # In tests, default to DEBUG=True for developer-friendly behavior unless overridden
 if TESTING:
@@ -151,8 +155,8 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.AllowAny' if DEBUG else 'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
-    'rest_framework_simplejwt.authentication.JWTAuthentication',
-    'rest_framework.authentication.SessionAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.UserRateThrottle',
@@ -161,8 +165,8 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'user': os.getenv('DRF_THROTTLE_USER', '100/min'),
         'anon': os.getenv('DRF_THROTTLE_ANON', '20/min'),
-    # Scoped throttle used for login endpoints (see ScopedRateThrottle with scope='login')
-    'login': os.getenv('DRF_THROTTLE_LOGIN', '10/min'),
+        # Scoped throttle used for login endpoints (see ScopedRateThrottle with scope='login')
+        'login': os.getenv('DRF_THROTTLE_LOGIN', '10/min'),
     },
     'DEFAULT_RENDERER_CLASSES': (
         ['rest_framework.renderers.JSONRenderer']
@@ -182,6 +186,10 @@ if not DEBUG:
         raise RuntimeError('SECURITY: ALLOWED_HOSTS cannot include * in production')
     if CORS_ALLOW_ALL_ORIGINS:
         raise RuntimeError('SECURITY: CORS_ALLOW_ALL must be 0 in production')
+    if not JWT_SIGNING_KEY:
+        raise RuntimeError('SECURITY: JWT_SIGNING_KEY must be set in production (no fallback).')
+    if JWT_SIGNING_KEY == SECRET_KEY:
+        raise RuntimeError('SECURITY: JWT_SIGNING_KEY must differ from SECRET_KEY for rotation isolation.')
 
 # Quota defaults (can be overridden via env)
 QUOTA_FREE_ACTIVE_CAP = int(os.getenv('QUOTA_FREE_ACTIVE_CAP', '1'))
@@ -204,17 +212,17 @@ TEXT_EXTRACTION_MAX_BYTES = int(os.getenv('TEXT_EXTRACTION_MAX_BYTES', str(8 * 1
 VIRUSSCAN_CMD = os.getenv('VIRUSSCAN_CMD', '').strip()
 VIRUSSCAN_TIMEOUT_SECONDS = int(os.getenv('VIRUSSCAN_TIMEOUT_SECONDS', '10'))
 ALLOWED_UPLOAD_EXTENSIONS = [
-    ext.strip().lower() for ext in os.getenv(
-        'ALLOWED_UPLOAD_EXTENSIONS', 'pdf,png,jpg,jpeg,docx,txt'
-    ).split(',') if ext
+    ext.strip().lower() for ext in os.getenv('ALLOWED_UPLOAD_EXTENSIONS', 'pdf,png,jpg,jpeg,docx,txt').split(',') if ext
 ]
 
 # SimpleJWT defaults
 from datetime import timedelta
+
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.getenv('JWT_ACCESS_MINUTES', '30'))),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.getenv('JWT_REFRESH_DAYS', '7'))),
-    'SIGNING_KEY': os.getenv('JWT_SIGNING_KEY', SECRET_KEY),
+    # In production JWT_SIGNING_KEY is enforced above; in dev/test we fall back to SECRET_KEY for convenience.
+    'SIGNING_KEY': JWT_SIGNING_KEY or SECRET_KEY,
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
@@ -233,7 +241,7 @@ AI_ASYNC = os.getenv('AI_ASYNC', '0') == '1'
 INVITE_SENDER_DOMAIN = os.getenv('INVITE_SENDER_DOMAIN', '').strip()
 # Default from email prioritizes invites@<domain> when configured; else falls back to Mailgun domain or a generic no-reply.
 DEFAULT_FROM_EMAIL = (
-    (f"invites@{INVITE_SENDER_DOMAIN}" if INVITE_SENDER_DOMAIN else None)
+    (f'invites@{INVITE_SENDER_DOMAIN}' if INVITE_SENDER_DOMAIN else None)
     or (f"no-reply@{os.getenv('MAILGUN_DOMAIN', '').strip()}" if os.getenv('MAILGUN_DOMAIN', '').strip() else None)
     or 'no-reply@localhost'
 )

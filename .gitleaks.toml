@@ -1,0 +1,46 @@
+title = "Granterstellar Secret Scan Rules"
+
+[extend]
+# You can extend built-in gitleaks rules if needed.
+
+[allowlist]
+# Common false positives
+regexes = [
+  '''(?i)change-this-in-prod''',
+  '''(?i)change-me-to-a-long-random-string''',
+  '''(?i)your_openai_api_key_here''',
+  '''(?i)sk_test_your_key_here''',
+  '''(?i)whsec_your_webhook_secret_here''',
+  '''(?i)price_test_(monthly|yearly)_seat'''
+]
+
+# Block private key and generic high-entropy patterns but rely on gitleaks defaults.
+# Add custom rule for JWT dev fallback to ensure it isn't used in prod commits (optional informational severity).
+
+[[rules]]
+id = "generic-private-key-block"
+regex = '''-----BEGIN (RSA|DSA|EC|OPENSSH|PGP) PRIVATE KEY-----'''
+keywords = ["PRIVATE KEY"]
+
+[[rules]]
+id = "potential-mailgun-key"
+# Mailgun private keys start with key- and are ~50 chars total
+regex = '''key-[0-9a-zA-Z]{10,}'''
+
+[[rules]]
+id = "stripe-secret-key"
+regex = '''sk_(live|test)_[0-9a-zA-Z]{10,}'''
+
+[[rules]]
+id = "stripe-webhook-secret"
+regex = '''whsec_[0-9a-zA-Z]{10,}'''
+
+[[rules]]
+id = "openai-api-key"
+regex = '''sk-[A-Za-z0-9]{20,}'''
+
+## Note: generic catch-all rule removed to reduce false positives (e.g., variable names like invite_token, csrf_token).
+
+[allowlist.files]
+# Allow scanning everything except intentionally ignored paths
+# (No entries means all tracked files are scanned)
