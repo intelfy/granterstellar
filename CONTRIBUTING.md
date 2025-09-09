@@ -48,3 +48,9 @@ If a secret leaks:
 - Document the rotation (internal log) with date/time and reason.
 
 Local `.vscode/`, `.env*`, and other ignored files may contain secrets—keep them private. The repository includes `.gitleaks.toml` to reduce false positives; adjust allowlist sparingly.
+
+### Automated Secret Scan & Lint Hooks
+
+- A GitHub Actions workflow (`.github/workflows/secret-scan.yml`) runs gitleaks on every push/PR to `main` and nightly; findings are advisory (build does not fail) but surface in SARIF.
+- Pre-commit hooks run Ruff (lint+format), secret scan (staged only), and ESLint (scoped to `web/src`). Run `pre-commit install` after cloning to enable.
+- To run all hooks manually: `pre-commit run --all-files`.

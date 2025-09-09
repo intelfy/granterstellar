@@ -6,6 +6,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Tooling / CI
+
+- Added advisory GitHub Actions workflow `secret-scan.yml` (gitleaks) running on push/PR and nightly schedule; uploads SARIF instead of failing build to surface potential historical secrets.
+- Reintroduced minimal ESLint pre-commit hook (scopes only `web/src` sources) alongside Ruff + secret scan; build artifacts (`web/dist`) excluded to avoid noise.
+
 ### Localization (UI Keys Insertion Workflow)
 
 All user-visible UI text must come from `locales/en.yml` and be accessed via the generated translator.
