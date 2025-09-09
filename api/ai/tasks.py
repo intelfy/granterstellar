@@ -5,7 +5,6 @@ import time
 from .models import AIJob, AIMetric, AIJobContext
 from .prompting import render_role_prompt, PromptTemplateError
 from . import retrieval
-from .context_budget import allocate
 from .section_pipeline import get_section, save_write_result, apply_revision
 from .validators import validate_role_output, SchemaError
 from .diff_engine import diff_texts
@@ -121,25 +120,28 @@ def run_write(job_id: int):
             job.error_text = 'section_locked'
             job.save(update_fields=['status', 'error_text'])
             return
+
+        # Retrieval & (future) budgeting
         res_snippets = retrieval.retrieve_for_section(section_id, job.input_json.get('answers') or {})
-        allocation = allocate(
-            max_prompt_tokens=2000,
-            snippet_texts=[s['text'] for s in res_snippets],
-            memory_items=[],
-            file_refs=job.input_json.get('file_refs') or [],
-        )
+        allocation = {"snippets": res_snippets}  # placeholder until context budgeting integrated here
+
+        # Provider call
         res = prov.write(
             section_id=section_id,
             answers=job.input_json.get('answers') or {},
             file_refs=job.input_json.get('file_refs') or None,
             deterministic=det_default,
         )
+
+        # Validation
         validation = {}
         try:
             validate_role_output('write', {"draft": res.text})
             validation = {"write_valid": True}
         except SchemaError as ve:  # pragma: no cover
             validation = {"write_valid": False, "error": str(ve)[:200]}
+
+        # Persist prompt context
         try:
             rp = render_role_prompt(
                 role='writer',
@@ -179,6 +181,8 @@ def run_write(job_id: int):
                     **validation,
                 },
             )
+
+        # Result & persistence
         job.result_json = {  # type: ignore[assignment]
             "draft_text": res.text,
             "assets": [],
@@ -188,6 +192,8 @@ def run_write(job_id: int):
         if section:
             save_write_result(section, res.text)
         job.status = 'done'
+
+        # Metrics
         dt_ms = int((time.time() - t0) * 1000)
         try:
             AIMetric.objects.create(
@@ -252,12 +258,7 @@ def run_revise(job_id: int):
             job.input_json.get('section_id') or '',
             {"change_request": job.input_json.get('change_request') or ''},
         )
-        allocation = allocate(
-            max_prompt_tokens=2000,
-            snippet_texts=[s['text'] for s in rev_snippets],
-            memory_items=[],
-            file_refs=job.input_json.get('file_refs') or [],
-        )
+        allocation = {"snippets": rev_snippets}
         base_text = job.input_json.get('base_text') or ''
         section_id = job.input_json.get('section_id') or ''
         res = prov.revise(

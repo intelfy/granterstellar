@@ -90,14 +90,17 @@ VS Code tasks
 - Env allow-lists: CSP_SCRIPT_SRC, CSP_STYLE_SRC, CSP_CONNECT_SRC (comma-separated; 'self' auto-added)
 - Avoid inline styles; CSP_ALLOW_INLINE_STYLES=1 is a temporary escape hatch only
 
-## Useful environment keys
+## Environment keys quick reference
 
-- Core: SECRET_KEY, DEBUG, ALLOWED_HOSTS, PUBLIC_BASE_URL
-- Async: EXPORTS_ASYNC, AI_ASYNC, REDIS_URL, CELERY_BROKER_URL, CELERY_RESULT_BACKEND
-- OAuth: GOOGLE_*, GITHUB_*, FACEBOOK_* (see install guide)
-- Billing: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, PRICE_*; FAILED_PAYMENT_GRACE_DAYS
-- Uploads: FILE_UPLOAD_MAX_BYTES, FILE_UPLOAD_MAX_MEMORY_SIZE, TEXT_EXTRACTION_MAX_BYTES, ALLOWED_UPLOAD_EXTENSIONS, VIRUSSCAN_*
-- AI limits: AI_RATE_PER_MIN_FREE, AI_RATE_PER_MIN_PRO, AI_RATE_PER_MIN_ENTERPRISE, AI_ENFORCE_RATE_LIMIT_DEBUG, AI_TEST_OPEN
+Use the authoritative matrix in `docs/ops_coolify_deployment_guide.md` for full details (purpose, type, required flags). This section highlights only frequently triaged categories:
+
+- Core: SECRET_KEY, ALLOWED_HOSTS, PUBLIC_BASE_URL, DEBUG
+- Async toggles: EXPORTS_ASYNC, AI_ASYNC (require Redis/Celery)
+- Billing: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, PRICE_*, FAILED_PAYMENT_GRACE_DAYS
+- Uploads & scanning: FILE_UPLOAD_MAX_BYTES, TEXT_EXTRACTION_MAX_BYTES, ALLOWED_UPLOAD_EXTENSIONS, VIRUSSCAN_*
+- AI limits: AI_RATE_PER_MIN_*, AI_ENFORCE_RATE_LIMIT_DEBUG, AI_TEST_OPEN, AI_DETERMINISTIC_SAMPLING
+- Security headers/CSP: CSP_* vars, SESSION/CSRF secure & samesite flags
+- Quotas: QUOTA_* (active/monthly caps)
 
 ## Monitoring (lightweight ideas)
 
@@ -107,9 +110,9 @@ VS Code tasks
 
 ## Docs
 
-- Install & envs: `docs/ops_coolify_deployment_guide.md` (formerly install_guide)
+- Install & envs: `docs/ops_coolify_deployment_guide.md`
 - Security hardening: `docs/security_hardening.md`
 - RLS: `docs/rls_postgres.md`
 - AI rate limiting: `docs/ai_rate_limiting.md`
-- Deterministic exports: `docs/deterministic_exports.md`
+- Exports architecture & determinism: `docs/exports.md`
 - Docs index: `docs/README.md`

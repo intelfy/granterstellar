@@ -8,6 +8,7 @@ from ai.validators import (
     SchemaError,
 )
 from .util import summarize_file_refs
+from ai.context_budget import apply_context_budget
 
 
 class Gpt5Provider(BaseProvider):
@@ -33,9 +34,15 @@ class Gpt5Provider(BaseProvider):
         file_refs: Optional[List[Dict[str, Any]]] = None,
         deterministic: bool = False,
     ) -> AIResult:
+        # Placeholder: retrieval & memory not yet passed into provider; budget manager still invoked for future parity.
+        budget = apply_context_budget(
+            retrieval=[],
+            memory=[],
+            file_refs=file_refs or [],
+            model_max_tokens=None,
+        )
         draft = f"[gpt-5] Draft for {section_id}:\n" + "\n".join(f"- {k}: {v}" for k, v in answers.items())
-        ctx = summarize_file_refs(file_refs)
-        # Writer contract wrapper
+        ctx = summarize_file_refs(budget.file_refs)
         payload = {"draft": draft + ctx}
         validate_writer_output(payload)
         return AIResult(text=payload["draft"], usage_tokens=0, model_id="gpt-5")
@@ -48,8 +55,14 @@ class Gpt5Provider(BaseProvider):
         file_refs: Optional[List[Dict[str, Any]]] = None,
         deterministic: bool = False,
     ) -> AIResult:
+        budget = apply_context_budget(
+            retrieval=[],
+            memory=[],
+            file_refs=file_refs or [],
+            model_max_tokens=None,
+        )
         text = base_text + "\n\n[gpt-5] Changes: " + change_request
-        ctx = summarize_file_refs(file_refs)
+        ctx = summarize_file_refs(budget.file_refs)
         payload = {"revised": text + ctx, "diff": {"added": [], "removed": []}}
         validate_reviser_output(payload)
         return AIResult(text=payload["revised"], usage_tokens=0, model_id="gpt-5")
@@ -62,6 +75,13 @@ class Gpt5Provider(BaseProvider):
         file_refs: Optional[List[Dict[str, Any]]] = None,
         deterministic: bool = False,
     ) -> AIResult:
-        payload = {"formatted_markdown": full_text}
+        budget = apply_context_budget(
+            retrieval=[],
+            memory=[],
+            file_refs=file_refs or [],
+            model_max_tokens=None,
+        )
+        ctx = summarize_file_refs(budget.file_refs)
+        payload = {"formatted_markdown": full_text + ctx}
         validate_formatter_output(payload)
         return AIResult(text=payload["formatted_markdown"], usage_tokens=0, model_id="gpt-5")

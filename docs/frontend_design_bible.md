@@ -5,7 +5,7 @@ PURPOSE: ['Provide stable UI selectors for styling and tests', 'Document current
 PRIORITY: 'MEDIUM'
 [[/AI_CONFIG]]
 
-# UI Selectors Reference (style-docs)
+# UI Selectors Reference
 
 Purpose: Give front-end engineers stable selectors (ids/classes/testids/aria) to target for styling and tests. Prefer adding classes sparingly; use data-testid for tests only. Avoid inline styles in production stylesheets.
 

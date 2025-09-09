@@ -26,6 +26,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
+    # Project-level utilities (management commands like env_doctor)
+    'app',
     'accounts',
     'billing',
     'orgs',

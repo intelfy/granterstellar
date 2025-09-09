@@ -19,6 +19,66 @@ Legend: [ ] todo, [~] in progress, [x] done
 - Security: strict CSP, Host/cookie/rate limits, OAuth state/JWKS, SSRF guards, safe external nav, webhook signature in non-DEBUG. Backups scripted; orphan scan present.
 - Tests: API/Web suites green locally; RLS suite green against Postgres via task. CI covers API/Web/Docs. Linting passes (ruff, eslint-js).
 
+## Alpha Backend Critical Path (Concise)
+
+Focused list of backend items required for a reliable, end-to-end AI-assisted proposal flow for early alpha. (H)=High / must-have for alpha, (R)=Recommended pre-public, (M)=Monitoring/maintainability.
+
+1. (H) Dynamic Question Generation – Planner auto-populates section questions from template banks + org metadata gap analysis; deterministic fallback when retrieval empty.
+2. (H) Section Workflow Model – Introduce `ProposalSection` (draft/approved, revisions log); migrate existing proposal `content` to sections to enable iterative write→revise→approve and per‑section quotas.
+3. (H) Revision Diff Engine – Semantic/paragraph diff (rapidfuzz) yielding structured added/removed/changed blocks powering revise cycle UI & validation.
+4. (H) Quota Binding to AI Usage – Enforce plan/section caps before enqueue; increment on first approval; map token accounting to sections.
+5. (H) Prompt Safety / Injection Shield – Pre-flight scan & neutralization of disallowed directives in user answers/memory; abort unsafe jobs.
+6. (H) Provider Fallback & Circuit Breaker – Automatic secondary model fallback + failure counters; open circuit after threshold to preserve availability.
+7. (H) Memory Injection Upgrade – Replace underscore hack with structured memory field + scoring (usage_count * recency decay) & token truncation.
+8. (R) Token & Phase Metrics – Capture retrieval_ms, embedding_ms, prompt/completion tokens, memory_count for tuning + accurate quota reconciliation.
+9. (H) E2E Alpha Test Suite – Simulated user path (grant call URL → plan → Q&A loop → revise → approve → format → export) asserting prompt versions, snippet refs, deterministic outputs.
+10. (R) Documentation (`docs/ai_prompts.md`) – Role contracts, variable semantics, safety policy, audit fields.
+
+Note: Items already completed (Prompt Template System, Prompt Contracts, PII Redaction, Context Budget Manager, Memory Model) are excluded from this list but remain documented below.
+
+## Condensed MVP Release Prep Checklist
+
+App correctness
+
+- [ ] All migrations applied cleanly on fresh Postgres (no squashed drift)
+- [ ] RLS matrix tests green against production-like Postgres role
+- [ ] Core flows manual pass: signup/org create → proposal AI write/revise/format → export PDF → billing checkout/portal → usage reflects subscription/quotas
+
+Security & config
+
+- [ ] `env_doctor --strict` passes with production env file
+- [ ] SECRET_KEY & JWT_SIGNING_KEY distinct; ALLOWED_HOSTS no wildcard
+- [ ] CORS_ALLOW_ALL=0; CSP allow-lists minimal; no inline styles (unless temporary override)
+- [ ] Stripe webhook event processed successfully in staging
+
+Performance & build
+
+- [ ] Web build: no source maps, no console/debugger, bundle within provisional budget
+- [ ] API image built with STRIP_PY=1 (optional) and starts with DEBUG=0
+- [ ] Health endpoints return 200 behind Traefik (GET /healthz, /api/healthz)
+
+Data durability
+
+- [ ] Media volume backup script runs & retains expected days
+- [ ] Postgres backup/restore smoke tested
+
+Observability & ops
+
+- [ ] Subscription enforcement cron scheduled (enforce_subscription_periods)
+- [ ] Orphaned media audit run (expect low count)
+- [ ] Error logs free of noisy repetitive stack traces
+
+Docs & handoff
+
+- [ ] Deployment guide reflects final env values
+- [ ] Docs index updated (legacy artifacts summarized)
+- [ ] CHANGELOG entry for release prepared
+
+Go / No-Go
+
+- [ ] Manual export integrity check (same proposal → identical PDF hash)
+- [ ] AI deterministic formatting verified (marker present)
+
 ## Current priorities (August–September 2025)
 
 ### 1. Stripe promotions live-mode E2E
@@ -67,7 +127,7 @@ These clarify that USERS NEVER SUPPLY PROMPTS DIRECTLY — backend owns role-spe
 - [ ] Provider Fallback & Circuit Breaker (High) — Wrap calls: on model failure/timeouts escalate to secondary provider; maintain failure counters; open circuit after threshold.  
 - [ ] Prompt Safety / Injection Shield (High) — Pre-flight scan of user answers & memory for disallowed directives (regex list) + neutralization; log events; abort with safe error.  
 - [x] PII Redaction Layer (High) — Deterministic category tokens `[CATEGORY_hash]` (EMAIL, NUMBER, PHONE, ID_CODE, SIMPLE_NAME, ADDRESS_LINE) with persisted `redaction_map`. Follow-ups: monitoring metrics, admin review UI.  
-- [ ] Context Budget Manager (High) — Central utility that given model max_tokens & reserved output tokens returns trimmed sets: retrieval snippets, memory items, file refs. Ensures deterministic ordering & annotation.  
+- [x] Context Budget Manager (High) — Implemented `ai/context_budget.py` providing deterministic trimming for retrieval, memory, file refs (currently retrieval/memory integration pending planner refactor). Follow-ups: semantic template match, dynamic reservation %, retrieval caching.  
 - [ ] Retrieval Caching (Medium) — Cache (grant_call_hash, section_id) → snippet IDs for TTL 24h to reduce re-embedding cost; bust on new resource ingestion.  
 - [ ] Scheduled RAG Refresh (Medium) — Celery beat: 2x weekly run ingestion tasks for new public grant calls list; summary log with counts (added, duplicates, failed).  
 - [ ] Re-Embed Drift Task (Medium) — If embedding model version changes, queue re-embed for all resources (batch throttled).  
@@ -175,21 +235,25 @@ These clarify that USERS NEVER SUPPLY PROMPTS DIRECTLY — backend owns role-spe
   - [ ] SPA: `VITE_BASE_URL`, `VITE_API_BASE`, `VITE_ROUTER_BASE=/app`, optional `VITE_UMAMI_*`
   - [x] Uploads/OCR, Quotas, AI provider keys per `.github/copilot-instructions.md`
 
-- Docs refresh — install_guide.md (idiot-proof)
-  - [ ] Update `docs/install_guide.md` referencing new env matrix (avoid duplication)
-  - [ ] Include screenshots of critical steps (variables, routes, health checks), and a copy-paste env block template
-  - [ ] Post-deploy validation checklist: health endpoints, CSP errors absent, OAuth login, Stripe webhook received, file upload OK
+
+### Deployment guide enhancements (ops_coolify_deployment_guide.md)
+
+- [ ] Add screenshots of critical steps (variables, routes, health checks)
+- [ ] Add copy-paste env block template extracted from authoritative matrix (avoid drift)
+- [ ] Post-deploy validation checklist: health endpoints, CSP errors absent, OAuth login, Stripe webhook received, file upload OK
 
 ### NEW: Environment Doctor & Consistency
 
-- [ ] Implement `manage.py env_doctor` command:
+- [x] Implement `manage.py env_doctor` command (completed 2025-09-08)
   - Validates production invariants (SECRET_KEY not default, ALLOWED_HOSTS no `*`, CORS_ALLOW_ALL=0 when DEBUG=0)
   - Ensures conditional groups complete (Stripe, OAuth, Redis/Celery, AI provider)
-  - Warns JWT_SIGNING_KEY == SECRET_KEY in prod
-  - Lists unset optional security hardening vars (CSP_* when analytics configured)
-  - Exits non-zero on hard errors; zero with warnings for advisory gaps
-- [ ] Add CI step invoking `python manage.py env_doctor --strict` (DEBUG=0 simulation) using a sample `.env.ci` to prevent regressions
-- [ ] Document env doctor usage in deployment guide (link to command section) once implemented
+  - Warns when JWT_SIGNING_KEY == SECRET_KEY in prod
+  - Lists unset optional security vars (e.g. CSP_*)
+  - Exit codes: 0 (ok/warnings), 1 (errors), 2 (strict errors)
+- [x] CI step invoking `python manage.py env_doctor --strict` added (`.github/workflows/env_doctor.yml`)
+- [x] Deployment guide updated with env doctor usage & production invocation block
+
+Status: Section retained for historical traceability; no further action required unless new env invariants added.
 
 ### 8. Proxy/CSP and deploy routes (Coolify/Traefik)
 
@@ -296,7 +360,7 @@ Database
 Backend/API
 
 - [ ] Proposals: versioning metadata on PATCH
-- Prompt shield: [ ] central prompts + basic injection screening
+  - (Merged) Prompt safety handled under Alpha Critical Path item 5 (Prompt Safety / Injection Shield) – removed duplicate backlog entry.
 
 Dependency & Supply Chain
 
@@ -333,7 +397,8 @@ Exports & Integrity
 
 AI Providers (additional)
 
-- [ ] Per-provider timeout & retry (circuit breaker counters)
+  (Merged) Timeout/retry & circuit breaker covered by Alpha Critical Path item 6; duplicate removed.
+  
 - [ ] Token usage accounting scaffold
 - [x] Prompt redaction layer (strip PII) before logging — covered by deterministic redaction taxonomy.
 

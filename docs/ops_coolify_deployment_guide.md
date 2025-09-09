@@ -5,7 +5,7 @@ PURPOSE: ['Provide step-by-step deployment instructions', 'Ensure correct enviro
 PRIORITY: 'CRITICAL'
 [[/AI_CONFIG]]
 
-# Granterstellar — Install & Coolify Deployment Guide (idiot‑proof)
+# Granterstellar — Deployment Guide (Coolify + Traefik)
 
 This guide tells you exactly what to click and what to paste to deploy Granterstellar using Coolify (with Traefik). No Linux or Docker knowledge required.
 
@@ -41,7 +41,7 @@ Key concepts (keep these defaults)
 - Asset base: VITE_BASE_URL = /static/app/
 - Router base: VITE_ROUTER_BASE = /app
 - App hosts: APP_HOSTS = comma‑separated hostnames that should redirect / → /app
-- Invite acceptance: SPA surfaces a global invite banner when an invite token is in the URL (selectors in docs/style-docs.md).
+- Invite acceptance: SPA surfaces a global invite banner when an invite token is in the URL (selectors in `docs/frontend_design_bible.md`).
  - Distinct JWT signing key: set `JWT_SIGNING_KEY` different from `SECRET_KEY` (enforced by forthcoming doctor script) to allow rotation without invalidating Django internals.
 
 ## 🔑 Environment Variable Matrix (Authoritative Reference)
@@ -160,7 +160,60 @@ Security startup invariants (production):
 
 If violated, the app raises at startup (fail-fast).
 
+Environment doctor command
+
+Run `python manage.py env_doctor` (or with `--strict` in CI) to validate:
+
+- Core secrets present (SECRET_KEY, PUBLIC_BASE_URL)
+- Distinct `JWT_SIGNING_KEY` (warns/error if identical to SECRET_KEY)
+- Conditional groups completeness (Stripe keys when prices set; Redis when async toggles set; AI provider keys per AI_PROVIDER)
+- Production invariants (no `*` in ALLOWED_HOSTS, CORS_ALLOW_ALL disabled)
+- HTTPS recommendation for PUBLIC_BASE_URL
+
+Exit codes: 0 = pass (warnings allowed), 1 = errors (non-strict), 2 = errors in strict mode. Use strict mode in CI to prevent deploying with incomplete env configuration.
+
 Operational recommendation: implement an "env doctor" management command that checks (a) conditional groups consistency (e.g., if any STRIPE price set then STRIPE_SECRET_KEY present, webhook secret in prod), (b) JWT_SIGNING_KEY != SECRET_KEY, (c) required AI provider keys. (Planned in backlog.)
+
+Recommended production invocation (fail-fast during deploy):
+
+```bash
+python manage.py env_doctor --strict
+```
+
+Minimal CI workflow snippet (already provided in `.github/workflows/env_doctor.yml`):
+
+```yaml
+jobs:
+   env-doctor:
+      steps:
+         - uses: actions/checkout@v4
+         - uses: actions/setup-python@v5
+            with:
+               python-version: '3.13'
+         - name: Install deps
+         run: |
+               cd api
+               python -m venv .venv
+               . .venv/bin/activate
+               pip install -r requirements.txt
+         - name: Env doctor
+            working-directory: api
+            env:
+               SECRET_KEY: dummy-ci-secret
+               PUBLIC_BASE_URL: https://example.com
+               DEBUG: '0'
+         run: |
+               . .venv/bin/activate
+               python manage.py env_doctor --strict
+```
+
+Interpretation guidance:
+
+- Exit 0: safe to continue deployment.
+- Exit 1: fix missing or inconsistent configuration before proceeding.
+- Exit 2: same as exit 1 but surfaced while using `--strict` (treat as hard failure in pipelines).
+
+Add this check before migrations/build to avoid wasting build minutes on a misconfigured release.
 
 ### Health & Readiness
 

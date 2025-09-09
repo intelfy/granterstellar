@@ -8,6 +8,7 @@ from ai.validators import (
     validate_formatter_output,
 )
 from .util import summarize_file_refs
+from ai.context_budget import apply_context_budget
 
 
 class GeminiProvider(BaseProvider):
@@ -31,9 +32,16 @@ class GeminiProvider(BaseProvider):
         file_refs: Optional[List[Dict[str, Any]]] = None,
         deterministic: bool = False,
     ) -> AIResult:
+        budget = apply_context_budget(
+            retrieval=[],
+            memory=[],
+            file_refs=file_refs or [],
+            model_max_tokens=None,
+        )
         content = "\n".join(f"- {k}: {v}" for k, v in answers.items())
         det = " deterministic=1" if deterministic else ""
-        payload = {"draft": f"[gemini:formatted{det}] {section_id}\n{content}"}
+        ctx = summarize_file_refs(budget.file_refs)
+        payload = {"draft": f"[gemini:formatted{det}] {section_id}\n{content}" + ctx}
         validate_writer_output(payload)
         return AIResult(text=payload["draft"], usage_tokens=0, model_id="gemini")
 
@@ -45,9 +53,15 @@ class GeminiProvider(BaseProvider):
         file_refs: Optional[List[Dict[str, Any]]] = None,
         deterministic: bool = False,
     ) -> AIResult:
+        budget = apply_context_budget(
+            retrieval=[],
+            memory=[],
+            file_refs=file_refs or [],
+            model_max_tokens=None,
+        )
         formatted = base_text.strip() + "\n\n[gemini:polish] " + change_request.strip()
         det = " deterministic=1" if deterministic else ""
-        ctx = summarize_file_refs(file_refs)
+        ctx = summarize_file_refs(budget.file_refs)
         payload = {"revised": formatted + det + ctx, "diff": {"added": [], "removed": []}}
         validate_reviser_output(payload)
         return AIResult(text=payload["revised"], usage_tokens=0, model_id="gemini")
@@ -60,8 +74,15 @@ class GeminiProvider(BaseProvider):
         file_refs: Optional[List[Dict[str, Any]]] = None,
         deterministic: bool = False,
     ) -> AIResult:
+        budget = apply_context_budget(
+            retrieval=[],
+            memory=[],
+            file_refs=file_refs or [],
+            model_max_tokens=None,
+        )
         hint = f" template={template_hint}" if template_hint else ""
         det = " deterministic=1" if deterministic else ""
-        payload = {"formatted_markdown": f"[gemini:final_format{hint}{det}]\n\n{full_text}"}
+        ctx = summarize_file_refs(budget.file_refs)
+        payload = {"formatted_markdown": f"[gemini:final_format{hint}{det}]\n\n{full_text}" + ctx}
         validate_formatter_output(payload)
         return AIResult(text=payload["formatted_markdown"], usage_tokens=0, model_id="gemini")

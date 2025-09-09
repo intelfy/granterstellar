@@ -47,9 +47,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Documentation
 
-- New deterministic exports spec (`docs/deterministic_exports.md`).
+- New deterministic exports spec (now unified in `docs/exports.md`, merging former `exports_async.md` + `deterministic_exports.md`).
 - Updated `docs/ops_runbook.md` with AI rate limiting & env keys.
 - Updated `docs/security_hardening.md` for layered AI abuse mitigation.
+- Consolidated exports docs; archived legacy files under `docs/archive/` to preserve historical context and avoid link rot.
+- Broad documentation cleanup: removed obsolete `install_guide` references, clarified org-only proposals model, trimmed duplicated env key lists (now referencing single authoritative matrix), removed deprecated alias parentheticals.
 
 ---
 Template for future releases:

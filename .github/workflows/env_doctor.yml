@@ -1,0 +1,35 @@
+name: Env Doctor
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  env-doctor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+            python-version: '3.13'
+      - name: Install dependencies
+        working-directory: api
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run env_doctor (strict)
+        working-directory: api
+        env:
+          SECRET_KEY: dummy-ci-secret
+          PUBLIC_BASE_URL: https://example.com
+          DEBUG: '0'
+        run: |
+          . .venv/bin/activate
+          python manage.py env_doctor --strict

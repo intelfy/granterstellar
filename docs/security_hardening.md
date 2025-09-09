@@ -23,7 +23,7 @@ This doc collects pragmatic, repo-specific hardening tips for production.
 See also:
 
 - `.github/SECURITY.md` for the disclosure policy
-- `docs/ops_coolify_deployment_guide.md` (formerly install_guide) for deployment and env keys
+- `docs/ops_coolify_deployment_guide.md` for deployment and env keys
 - `README.md` for architecture and local dev
 - `docs/ai_rate_limiting.md` for limiter architecture
 
@@ -79,15 +79,22 @@ Reference: `docs/ai_rate_limiting.md` (design), `docs/ops_runbook.md` (operation
 
 ## Environment keys (high-impact)
 
-- Core: SECRET_KEY, DEBUG, ALLOWED_HOSTS, DATABASE_URL, REDIS_URL, PUBLIC_BASE_URL.
-- Security: `SECURE_*` (HSTS, SSL redirect, referrer policy), `SESSION_*/CSRF_*` (secure/samesite), `CSP_SCRIPT_SRC`, `CSP_STYLE_SRC`, `CSP_CONNECT_SRC`, `CSP_ALLOW_INLINE_STYLES`.
-- OAuth: GOOGLE_*, GITHUB_*, FACEBOOK_*, OAUTH_REDIRECT_URI, GOOGLE_JWKS_URL, GOOGLE_ISSUER.
-- Async: EXPORTS_ASYNC, AI_ASYNC, CELERY_BROKER_URL, CELERY_RESULT_BACKEND, CELERY_TASK_ALWAYS_EAGER.
-- SPA: VITE_BASE_URL, VITE_API_BASE, VITE_ROUTER_BASE, VITE_UMAMI_WEBSITE_ID, VITE_UMAMI_SRC, VITE_UI_EXPERIMENTS.
-- Email: INVITE_SENDER_DOMAIN, EMAIL_* (host, port, user, password, TLS), FRONTEND_INVITE_URL_BASE.
-- Billing: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, PRICE_PRO_MONTHLY, PRICE_PRO_YEARLY, PRICE_ENTERPRISE_MONTHLY, PRICE_BUNDLE_1/10/25.
-- Uploads/OCR: FILE_UPLOAD_MAX_BYTES, FILE_UPLOAD_MAX_MEMORY_SIZE, TEXT_EXTRACTION_MAX_BYTES, ALLOWED_UPLOAD_EXTENSIONS, OCR_IMAGE, OCR_PDF, optional VIRUSSCAN_*.
-- Quotas: QUOTA_FREE_ACTIVE_CAP, QUOTA_PRO_MONTHLY_CAP, QUOTA_PRO_PER_SEAT, QUOTA_ENTERPRISE_MONTHLY_CAP.
-- AI provider: AI_PROVIDER, OPENAI_API_KEY, GEMINI_API_KEY.
-- AI limits: AI_RATE_PER_MIN_FREE, AI_RATE_PER_MIN_PRO, AI_RATE_PER_MIN_ENTERPRISE, AI_ENFORCE_RATE_LIMIT_DEBUG, AI_TEST_OPEN.
-- Orgs/Invites: ORG_INVITE_TTL_DAYS, ORG_INVITES_PER_HOUR, APP_HOSTS.
+This list duplicated the deployment guide and is now canonicalized.
+
+Authoritative matrix: `docs/ops_coolify_deployment_guide.md` (see the section "Environment Variable Matrix"). That file is the single source of truth for:
+
+- Variable purpose, type, required/conditional flags.
+- Defaults and operational notes.
+- Future additions (add there first; then reference here if security relevant).
+
+Security-relevant subsets to monitor (quick reference only):
+
+- Core secrets & boundaries: `SECRET_KEY`, `JWT_SIGNING_KEY`, `ALLOWED_HOSTS`, `PUBLIC_BASE_URL`.
+- Transport/cookies: `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `SECURE_SSL_REDIRECT`, `SECURE_HSTS_*`, `SESSION_COOKIE_SAMESITE`, `CSRF_COOKIE_SAMESITE`.
+- CSP: `CSP_SCRIPT_SRC`, `CSP_STYLE_SRC`, `CSP_CONNECT_SRC`, `CSP_ALLOW_INLINE_STYLES`.
+- AI & quota gating: `AI_RATE_PER_MIN_*`, `AI_DAILY_REQUEST_CAP_*`, `AI_MONTHLY_TOKENS_CAP_*`, `AI_ENFORCE_RATE_LIMIT_DEBUG`, `AI_DETERMINISTIC_SAMPLING`.
+- Upload & scanning: `FILE_UPLOAD_MAX_BYTES`, `TEXT_EXTRACTION_MAX_BYTES`, `ALLOWED_UPLOAD_EXTENSIONS`, `VIRUSSCAN_CMD`, `VIRUSSCAN_TIMEOUT_SECONDS`.
+- Billing integrity: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PRICE_*`.
+- Async execution trust surface: `EXPORTS_ASYNC`, `AI_ASYNC`, `CELERY_*`, `REDIS_URL`.
+
+If a variable affects security posture and is added to the matrix, add a bullet above (do not recreate the full matrix here).

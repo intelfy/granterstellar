@@ -10,10 +10,13 @@ PRIORITY: 'MEDIUM'
 This document describes the Proposals API used by the SPA. It covers scoping, quotas, and autosave.
 
 ## Scope and headers
-- Personal scope (default): omit `X-Org-ID`. Queries operate on proposals where `org == null` and `author == current_user`.
-- Org scope: send `X-Org-ID: <org_id>`. Queries operate on proposals with `org == <org_id>` (subject to RLS and membership).
+New proposals are organization-scoped. Legacy personal proposals (pre-org migration) were backfilled into synthetic orgs; creation without an organization is no longer supported.
+
+- Org scope (current model): send `X-Org-ID: <org_id>`. Queries operate on proposals with `org == <org_id>` (subject to RLS and membership).
+  - Omit `X-Org-ID` only when accessing a legacy personal proposal (read-only); new writes must target an organization.
 
 ## Endpoints
+
 - List proposals
   - GET `/api/proposals/`
   - Scope determined by header as above
@@ -34,7 +37,7 @@ This document describes the Proposals API used by the SPA. It covers scoping, qu
   - POST `/api/sections/{id}/promote` — Copies `draft_content` → `content` and sets `locked=true` preventing further write/revise jobs until unlocked.
   - DELETE `/api/sections/{id}/promote` — Unlocks the section (`locked=false`) allowing additional AI write/revise operations.
   - Emits AIMetric record with `type: "promote"`, `proposal_id`, `section_id` for observability.
-  - Authorization: user must be proposal author in personal scope or an org member (RLS + view check). Non-members receive 403 `{"error":"forbidden"}`.
+  - Authorization: user must be the proposal author (legacy personal) or an org member in the proposal's organization (RLS + view check). Non-members receive 403 `{"error":"forbidden"}`.
   - Clients should ensure any pending draft edits are flushed to `draft_content` prior to promotion to avoid losing unsaved changes.
 
 Implementation notes

@@ -4,7 +4,7 @@ Welcome! This project favors concise, accurate docs and tests. Start here:
 
 - Docs index: `docs/README.md`
 - Contributor/agent guide: `.github/copilot-instructions.md`
-- Install/deploy: `docs/install_guide.md`
+- Install/deploy: `docs/ops_coolify_deployment_guide.md`
 
 ## Local development
 - API (Django): use VS Code tasks
@@ -25,7 +25,7 @@ Welcome! This project favors concise, accurate docs and tests. Start here:
 
 ## Useful pointers
 - RLS: `docs/rls_postgres.md`
-- Exports async: `docs/exports_async.md`
+- Exports (async + determinism unified): `docs/exports.md`
 - Proposals API: `docs/proposals.md`
 
 ## Reporting security issues
