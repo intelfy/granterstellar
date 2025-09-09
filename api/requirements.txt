@@ -16,4 +16,4 @@ python-docx==1.1.2
 ruff==0.6.9
 pdfminer.six==20240706
 PyYAML==6.0.2
-requests==2.32.3
+requests==2.32.4  # GHSA-9hjg-9r4m-mvj7
