@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, apiMaybeAsync, apiUpload, safeOpenExternal, openDebugLocal, formatDiscount } from '../lib/core.js'
+import { t, KEYS } from '../keys.generated'
 import _MemorySuggestions from '../components/MemorySuggestions.jsx'
 
 function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
@@ -57,7 +58,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
       }))
       e.target.value = ''
   } catch {
-      setUploadError('Upload failed')
+  setUploadError(t('ui.common.upload_failed'))
     } finally {
       setUploading(false)
     }
@@ -67,7 +68,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
     setLoading(true)
     setError('')
     try {
-      const body = grantUrl ? { grant_url: grantUrl } : { text_spec: textSpec || 'General grant' }
+  const body = grantUrl ? { grant_url: grantUrl } : { text_spec: textSpec || 'General grant' } // fallback literal stays internal
       const p = await apiMaybeAsync('/ai/plan', { method: 'POST', token, orgId: orgId || undefined, body })
       setPlan(p)
       setSectionIndex(0)
@@ -75,7 +76,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
       setDraft('')
       setChangeReq('')
   } catch {
-      setError('Failed to load plan')
+  setError(t('ui.errors.plan_load_failed'))
     } finally {
       setLoading(false)
     }
@@ -100,7 +101,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
       setDraft(res?.draft_text || '')
       setMemoryRefresh(r => r + 1) // newly recorded answers become suggestions
   } catch {
-      setError('Write failed')
+  setError(t('ui.errors.write_failed'))
     } finally { setLoading(false) }
   }
 
@@ -124,7 +125,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
       setDraft(res?.draft_text || draft)
       setMemoryRefresh(r => r + 1) // change requests recorded
   } catch {
-      setError('Revise failed')
+  setError(t('ui.errors.revise_failed'))
     } finally { setLoading(false) }
   }
 
@@ -146,7 +147,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
         setChangeReq('')
       }
   } catch {
-      setError('Save failed')
+  setError(t('ui.errors.save_failed'))
     } finally { setLoading(false) }
   }
 
@@ -162,7 +163,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
       setLastSavedAt(new Date())
       await onSaved?.()
     } catch {
-      setError('Save note failed')
+  setError(t('ui.errors.save_note_failed'))
     } finally { setLoading(false) }
   }
 
@@ -195,39 +196,39 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
       })
       setFormattedText(res?.formatted_text || '')
   } catch {
-      setError('Final format failed')
+  setError(t('ui.errors.final_format_failed'))
     } finally { setLoading(false) }
   }
 
   return (
     <div>
       <div style={{ borderTop: '1px solid #eee', paddingTop: 8, marginTop: 8 }}>
-        <div><strong>Author</strong>: #{proposal.author}</div>
-        <div><strong>Created</strong>: {proposal.created_at ? new Date(proposal.created_at).toLocaleString() : '—'}</div>
-        <div><strong>Last edited</strong>: {proposal.last_edited ? new Date(proposal.last_edited).toLocaleString() : '—'}{me ? ` by ${me.username || 'you'}` : ''}{lastSavedAt ? ' (just now)' : ''}</div>
+  <div><strong>{t('ui.labels.author')}</strong>: #{proposal.author}</div>
+  <div><strong>{t('ui.labels.created')}</strong>: {proposal.created_at ? new Date(proposal.created_at).toLocaleString() : '—'}</div>
+  <div><strong>{t('ui.labels.last_edited')}</strong>: {proposal.last_edited ? new Date(proposal.last_edited).toLocaleString() : '—'}{me ? t('ui.author_panel.by_user',{username: me.username || 'you'}) : ''}{lastSavedAt ? t('ui.author_panel.just_now') : ''}</div>
         <div style={{ marginTop: 6 }}>
-          <div>Internal note</div>
-          <textarea data-testid="note-text" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note for collaborators" />
+          <div>{t('ui.labels.internal_note')}</div>
+          <textarea data-testid="note-text" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('ui.author_panel.note_placeholder')} />
           <div>
-            <button data-testid="note-save" onClick={saveNote} disabled={loading}>Save Note</button>
+            <button data-testid="note-save" onClick={saveNote} disabled={loading}>{t('ui.buttons.save_note')}</button>
           </div>
         </div>
       </div>
       {!plan ? (
         <div>
-          <div>Plan your proposal</div>
-          <input value={grantUrl} onChange={(e) => setGrantUrl(e.target.value)} placeholder="Grant URL (optional)" />
-          <textarea rows={3} value={textSpec} onChange={(e) => setTextSpec(e.target.value)} placeholder="Or paste a brief specification (optional)" />
-          <button onClick={startPlan} disabled={loading}>Start</button>
+          <div>{t('ui.labels.plan_proposal')}</div>
+          <input value={grantUrl} onChange={(e) => setGrantUrl(e.target.value)} placeholder={t('ui.labels.grant_url_optional')} />
+          <textarea rows={3} value={textSpec} onChange={(e) => setTextSpec(e.target.value)} placeholder={t('ui.labels.spec_optional')} />
+          <button onClick={startPlan} disabled={loading}>{t('ui.buttons.start')}</button>
           {error && <div>{error}</div>}
         </div>
       ) : (
         <div>
           <div>
-            <div><strong>Section {sectionIndex + 1} / {sections.length}:</strong> {current?.title}</div>
+            <div><strong>{t('ui.labels.section_counter',{current: sectionIndex + 1, total: sections.length})}</strong> {current?.title}</div>
             <div>
-              Schema: {plan?.schema_version || 'v1'}
-              {lastSavedAt && <span> · Last saved {lastSavedAt.toLocaleTimeString()}</span>}
+              {t('ui.proposals_ui.schema',{version: plan?.schema_version || 'v1'})}
+              {lastSavedAt && <span> · {t('ui.proposals_ui.last_saved',{time: lastSavedAt.toLocaleTimeString()})}</span>}
             </div>
           </div>
           <div>
@@ -251,14 +252,14 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
                 })
               }}
             />
-            <div>
-              <label htmlFor={`file-${current?.id || 'section'}`}>Attach files (pdf, docx, txt, images)</label>
+      <div>
+        <label htmlFor={`file-${current?.id || 'section'}`}>{t('ui.labels.attach_files')}</label>
               <input id={`file-${current?.id || 'section'}`} type="file" accept=".pdf,.docx,.txt,image/*" onChange={onUploadFile} />
-              {uploading && <span> Uploading…</span>}
+        {uploading && <span> {t('ui.common.uploading')}</span>}
               {uploadError && <div>{uploadError}</div>}
               {current && (filesBySection[current.id]?.length > 0) && (
                 <div>
-                  <div>Files for this section</div>
+          <div>{t('ui.common.files_for_section')}</div>
                   <ul>
                     {filesBySection[current.id].map((f, idx) => (
                       <li key={idx}>
@@ -267,7 +268,7 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
                         </div>
                         {f.ocr_text && (
                           <div>
-                            <div>OCR preview</div>
+              <div>{t('ui.common.ocr_preview')}</div>
                             <textarea readOnly rows={4} value={f.ocr_text} />
                           </div>
                         )}
@@ -278,38 +279,36 @@ function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
               )}
             </div>
             <div>
-              <button onClick={writeDraft} disabled={loading}>Write</button>
-              <input placeholder="Change request (optional)" value={changeReq} onChange={(e) => setChangeReq(e.target.value)} />
-              <button onClick={applyChanges} disabled={loading || !(draft || prevText)}>Revise</button>
-              <button onClick={approveAndSave} disabled={loading || !(draft || prevText)}>Approve & Save</button>
+        <button onClick={writeDraft} disabled={loading}>{t('ui.buttons.write')}</button>
+        <input placeholder={t('ui.labels.change_request_optional')} value={changeReq} onChange={(e) => setChangeReq(e.target.value)} />
+        <button onClick={applyChanges} disabled={loading || !(draft || prevText)}>{t('ui.buttons.revise')}</button>
+        <button onClick={approveAndSave} disabled={loading || !(draft || prevText)}>{t('ui.buttons.approve_save')}</button>
             </div>
             <div>
               <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
                 <div style={{ flex: 1 }}>
-                  <div>Previous</div>
+          <div>{t('ui.diff.previous')}</div>
                   <pre>{prevText || '—'}</pre>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div>Draft</div>
+          <div>{t('ui.diff.draft')}</div>
                   <pre data-testid="draft-text">{(draft || prevText) || '—'}</pre>
                 </div>
               </div>
             </div>
             {error && <div>{error}</div>}
-            {loading && <div>Working…</div>}
+      {loading && <div>{t('ui.common.working')}</div>}
           </div>
           <div>
-            <div>
-              Approved sections: {Object.keys(approvedById).length} / {sections.length}
-            </div>
+      <div>{t('ui.labels.approved_sections')}: {Object.keys(approvedById).length} / {sections.length}</div>
             {allApproved && (
               <div>
-                <div>Final formatting (runs after all sections are approved)</div>
-                <input placeholder="Template hint (optional)" value={templateHint} onChange={(e) => setTemplateHint(e.target.value)} />
-                <button onClick={runFinalFormatting} disabled={loading}>Run Final Formatting</button>
+        <div>{t('ui.labels.final_formatting_intro')}</div>
+        <input placeholder={t('ui.labels.template_hint_optional')} value={templateHint} onChange={(e) => setTemplateHint(e.target.value)} />
+        <button onClick={runFinalFormatting} disabled={loading}>{t('ui.buttons.run_final_formatting')}</button>
                 {formattedText && (
                   <div>
-                    <div>Formatted preview</div>
+          <div>{t('ui.labels.formatted_preview')}</div>
                     <textarea readOnly rows={10} value={formattedText} />
                   </div>
                 )}
@@ -332,12 +331,11 @@ export function Proposals({ token, selectedOrgId }) {
   const [fmtById, setFmtById] = useState({})
   const [orgId, setOrgId] = useState(() => localStorage.getItem('orgId') || '')
   const [openAuthorForId, setOpenAuthorForId] = useState(null)
-  const reasonLabel = (code) => ({
-    ok: 'OK',
-    active_cap_reached: 'Active proposal cap reached for your plan',
-    monthly_cap_reached: 'Monthly creation limit reached',
-    quota: 'Quota reached',
-  }[code] || code)
+  const reasonLabel = (code) => {
+    const k = `ui.paywall.reasons.${code}`
+    if (k in KEYS) return t(k)
+    return code
+  }
   const isPaidActive = (u) => u && u.tier !== 'free' && (u.status === 'active' || u.status === 'trialing')
   const archive = async (p) => {
     try {
@@ -345,7 +343,7 @@ export function Proposals({ token, selectedOrgId }) {
       await refresh()
       await refreshUsage()
   } catch (e) {
-      alert('Archive failed: ' + (e?.data?.error || e.message))
+  alert(t('ui.dashboard.export_failed',{ message: e?.data?.error || e.message }))
     }
   }
   const unarchive = async (p) => {
@@ -354,8 +352,8 @@ export function Proposals({ token, selectedOrgId }) {
       await refresh()
       await refreshUsage()
   } catch (e) {
-      if (e.status === 402) alert('Unarchive blocked: ' + reasonLabel(e?.data?.reason))
-      else alert('Unarchive failed: ' + (e?.data?.error || e.message))
+  if (e.status === 402) alert(t('ui.dashboard.new_blocked',{ reason: reasonLabel(e?.data?.reason) }))
+  else alert('Unarchive failed: ' + (e?.data?.error || e.message))
     }
   }
   const refreshUsage = async () => {
@@ -393,9 +391,9 @@ export function Proposals({ token, selectedOrgId }) {
           return
         }
       }
-      alert('Export still processing; try again later')
+  alert(t('ui.errors.export_still_processing'))
   } catch {
-      alert('Export failed: ' + e.message)
+  alert(t('ui.errors.export_failed'))
     } finally {
       setExporting(null)
     }
@@ -405,18 +403,18 @@ export function Proposals({ token, selectedOrgId }) {
     try {
       if (usage && usage.can_create_proposal === false) {
         const reason = usage.reason || 'quota'
-        alert(`Paywall: ${reasonLabel(reason)}. Click Upgrade to continue.`)
+        alert(t('ui.dashboard.paywall_alert',{ reason: reasonLabel(reason) }))
         return
       }
-      await api('/proposals/', { method: 'POST', token, orgId: orgId || undefined, body: { content: { meta: { title: 'Untitled' }, sections: {} }, schema_version: 'v1' } })
+      await api('/proposals/', { method: 'POST', token, orgId: orgId || undefined, body: { content: { meta: { title: t('ui.common.untitled') }, sections: {} }, schema_version: 'v1' } })
       await refresh()
       await refreshUsage()
   } catch {
       if (e.status === 402 && e.data) {
         const reason = e.data.reason || 'quota'
-        alert(`Paywall: ${reasonLabel(reason)}. Click Upgrade to continue.`)
+        alert(t('ui.dashboard.paywall_alert',{ reason: reasonLabel(reason) }))
       } else {
-        alert('Create failed: ' + e.message)
+        alert('Create failed: ' + e.message) // keep literal for dev error
       }
     } finally {
       setCreating(false)
@@ -456,7 +454,7 @@ export function Proposals({ token, selectedOrgId }) {
         await refreshUsage()
       }
   } catch {
-      alert('Checkout unavailable')
+  alert(t('ui.dashboard.checkout_unavailable'))
     }
   }
   const onPortal = async () => {
@@ -473,23 +471,23 @@ export function Proposals({ token, selectedOrgId }) {
         }
       }
   } catch {
-      alert('Portal unavailable')
+  alert(t('ui.dashboard.portal_unavailable'))
     }
   }
   const onCancel = async () => {
     try {
       await api('/billing/cancel', { method: 'POST', token, orgId: orgId || undefined, body: {} })
       await refreshUsage()
-      alert('Subscription will cancel at period end.')
+  alert(t('ui.dashboard.subscription_cancelled_schedule'))
   } catch {
-      alert('Cancel failed')
+  alert('Cancel failed')
     }
   }
   const onResume = async () => {
     try {
       await api('/billing/resume', { method: 'POST', token, orgId: orgId || undefined, body: {} })
       await refreshUsage()
-      alert('Subscription resumed.')
+      alert(t('ui.dashboard.subscription_resumed'))
   } catch {
       alert('Resume failed')
     }
@@ -497,49 +495,49 @@ export function Proposals({ token, selectedOrgId }) {
   return (
     <section>
       <div>
-        <h2>My Proposals</h2>
+        <h2>{t('ui.dashboard.heading')}</h2>
         {usage && (
           <div>
-            Tier: {usage.tier} · Status: {usage.status} · Active: {usage.usage?.active ?? '-'}{usage.limits?.monthly_cap ? ` · Created this month: ${usage.usage?.created_this_period ?? '-'}/${usage.limits?.monthly_cap}` : ''}
-            {usage.subscription?.current_period_end ? ` · Period ends: ${new Date(usage.subscription.current_period_end).toLocaleDateString()}` : ''}
+            {t('ui.dashboard.tier_status',{tier: usage.tier, status: usage.status})} · {t('ui.dashboard.active_count',{count: usage.usage?.active ?? '-'})}{usage.limits?.monthly_cap ? ` · ${t('ui.dashboard.created_this_month',{count: usage.usage?.created_this_period ?? '-', limit: usage.limits?.monthly_cap})}` : ''}
+            {usage.subscription?.current_period_end ? ` · ${t('ui.dashboard.period_ends',{date: new Date(usage.subscription.current_period_end).toLocaleDateString()})}` : ''}
             {usage.subscription?.discount ? (
-              <> · <span data-testid="promo-banner" aria-label="active-promo">Promo: {formatDiscount(usage.subscription.discount)}</span></>
+              <> · <span data-testid="promo-banner" aria-label="active-promo">{t('ui.dashboard.promo_active',{discount: formatDiscount(usage.subscription.discount)})}</span></>
             ) : ''}
-            {usage.can_create_proposal === false && usage.reason ? ` · New proposal blocked: ${reasonLabel(usage.reason)}` : ''}
+            {usage.can_create_proposal === false && usage.reason ? ` · ${t('ui.dashboard.new_blocked',{reason: reasonLabel(usage.reason)})}` : ''}
           </div>
         )}
         <div>
-          <input placeholder="Org ID (optional)" value={orgId} onChange={(e) => setOrgId(e.target.value)} />
-          <button disabled={creating || !usageLoaded || (usage && usage.can_create_proposal === false)} onClick={createOne}>New</button>
-          {usage && usage.can_create_proposal === false && (<button onClick={onUpgrade}>Upgrade</button>)}
-          <button onClick={onPortal}>Billing Portal</button>
+          <input placeholder={t('ui.dashboard.org_id_placeholder')} value={orgId} onChange={(e) => setOrgId(e.target.value)} />
+          <button disabled={creating || !usageLoaded || (usage && usage.can_create_proposal === false)} onClick={createOne}>{t('ui.dashboard.new_button')}</button>
+          {usage && usage.can_create_proposal === false && (<button onClick={onUpgrade}>{t('ui.dashboard.upgrade_button')}</button>)}
+          <button onClick={onPortal}>{t('ui.dashboard.billing_portal_button')}</button>
           {usage?.subscription?.cancel_at_period_end ? (
-            <button onClick={onResume}>Resume</button>
+            <button onClick={onResume}>{t('ui.dashboard.resume_button')}</button>
           ) : (
-            <button onClick={onCancel}>Cancel at period end</button>
+            <button onClick={onCancel}>{t('ui.dashboard.cancel_at_period_end_button')}</button>
           )}
         </div>
       </div>
-      {loading && <div>Loading…</div>}
+      {loading && <div>{t('ui.dashboard.loading')}</div>}
       <ul>
         {items.map(p => (
           <li key={p.id}>
             <div>
-              <strong>#{p.id}</strong> — {(p.content?.meta?.title) || 'Untitled'} — {p.state}
+              <strong>{t('ui.dashboard.proposal_id_prefix')}{p.id}</strong> — {(p.content?.meta?.title) || t('ui.common.untitled')} — {p.state}
               <select value={fmtById[p.id] || 'pdf'} onChange={(e) => setFmtById(s => ({ ...s, [p.id]: e.target.value }))}>
-                <option value="pdf">PDF</option>
-                <option value="docx">DOCX</option>
-                <option value="md">Markdown</option>
+                <option value="pdf">{t('ui.dashboard.format_pdf')}</option>
+                <option value="docx">{t('ui.dashboard.format_docx')}</option>
+                <option value="md">{t('ui.dashboard.format_md')}</option>
               </select>
-              {exporting === p.id && <span>Exporting…</span>}
-              <button disabled={exporting === p.id} onClick={() => doExport(p.id, fmtById[p.id] || 'pdf')}>Export</button>
+              {exporting === p.id && <span>{t('ui.dashboard.exporting')}</span>}
+              <button disabled={exporting === p.id} onClick={() => doExport(p.id, fmtById[p.id] || 'pdf')}>{t('ui.dashboard.export_button')}</button>
               <button onClick={() => setOpenAuthorForId(id => id === p.id ? null : p.id)}>
-                {openAuthorForId === p.id ? 'Close Author' : 'Open Author'}
+                {openAuthorForId === p.id ? t('ui.buttons.close_author') : t('ui.buttons.open_author')}
               </button>
               {p.state !== 'archived' ? (
-                <button disabled={!isPaidActive(usage)} title={!isPaidActive(usage) ? 'Paid plan required to archive' : ''} onClick={() => archive(p)}>Archive</button>
+                <button disabled={!isPaidActive(usage)} title={!isPaidActive(usage) ? t('ui.dashboard.paid_required_to_archive') : ''} onClick={() => archive(p)}>{t('ui.dashboard.archive_button')}</button>
               ) : (
-                <button onClick={() => unarchive(p)}>Unarchive</button>
+                <button onClick={() => unarchive(p)}>{t('ui.dashboard.unarchive_button')}</button>
               )}
             </div>
             {openAuthorForId === p.id && (
@@ -585,11 +583,11 @@ export function Orgs({ token, onSelectOrg }) {
   return (
     <section>
       <div>
-        <h2>Organizations</h2>
+        <h2>{t('ui.orgs.heading')}</h2>
         <div>
-          <input placeholder="New org name" value={name} onChange={e => setName(e.target.value)} />
-          <input placeholder="Description (optional)" value={desc} onChange={e => setDesc(e.target.value)} />
-          <button onClick={createOrg}>Create</button>
+          <input placeholder={t('ui.orgs.new_name_placeholder')} value={name} onChange={e => setName(e.target.value)} />
+          <input placeholder={t('ui.orgs.description_placeholder')} value={desc} onChange={e => setDesc(e.target.value)} />
+          <button onClick={createOrg}>{t('ui.orgs.create_button')}</button>
         </div>
       </div>
       <ul>
@@ -599,21 +597,21 @@ export function Orgs({ token, onSelectOrg }) {
               <strong>#{org.id}</strong> {org.name}
               <span> {org.description}</span>
               <span> admin: {org.admin?.username}</span>
-              <button onClick={() => onSelectOrg(String(org.id))}>Use</button>
-              <button onClick={() => { const open = selectedId === String(org.id); setSelectedId(open ? '' : String(org.id)); if (!open) { loadMembers(org.id); loadInvites(org.id) } }}>{selectedId === String(org.id) ? 'Hide' : 'Manage'}</button>
-              <button onClick={() => removeOrg(org.id)}>Delete</button>
+              <button onClick={() => onSelectOrg(String(org.id))}>{t('ui.orgs.use_button')}</button>
+              <button onClick={() => { const open = selectedId === String(org.id); setSelectedId(open ? '' : String(org.id)); if (!open) { loadMembers(org.id); loadInvites(org.id) } }}>{selectedId === String(org.id) ? t('ui.orgs.hide_button') : t('ui.orgs.manage_button')}</button>
+              <button onClick={() => removeOrg(org.id)}>{t('ui.orgs.delete_button')}</button>
             </div>
             {selectedId === String(org.id) && (
               <div>
                 <div>
-                  <div>Members</div>
-                  <div>Invite by email</div>
-                  <input placeholder="name@example.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+                  <div>{t('ui.orgs.members_heading')}</div>
+                  <div>{t('ui.orgs.invite_heading')}</div>
+                  <input placeholder={t('ui.orgs.invite_email_placeholder')} value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
                   <select value={inviteRole} onChange={e => setInviteRole(e.target.value)}>
-                    <option value="member">member</option>
-                    <option value="admin">admin</option>
+                    <option value="member">{t('ui.orgs.member_role_member')}</option>
+                    <option value="admin">{t('ui.orgs.member_role_admin')}</option>
                   </select>
-                  <button onClick={() => inviteMember(org.id)}>Invite</button>
+                  <button onClick={() => inviteMember(org.id)}>{t('ui.orgs.invite_button')}</button>
                 </div>
                 <ul>
                   {(membersByOrg[org.id] || []).map(m => (
@@ -624,15 +622,15 @@ export function Orgs({ token, onSelectOrg }) {
                   ))}
                 </ul>
                 <div>
-                  <div>Pending invites</div>
+                  <div>{t('ui.orgs.pending_invites_heading')}</div>
                   <ul>
                     {(invitesByOrg[org.id] || []).map(inv => (
                       <li key={inv.id}>
-                        {inv.email} — {inv.role} {inv.accepted_at ? '(accepted)' : inv.revoked_at ? '(revoked)' : '(pending)'}
+                        {inv.email} — {inv.role} {inv.accepted_at ? t('ui.orgs.accepted') : inv.revoked_at ? t('ui.orgs.revoked') : t('ui.orgs.pending')}
                         {!inv.accepted_at && !inv.revoked_at && (
                           <>
-                            <button onClick={() => revokeInvite(org.id, inv.id)}>Revoke</button>
-                            <span> token: {inv.token}</span>
+                            <button onClick={() => revokeInvite(org.id, inv.id)}>{t('ui.orgs.revoke_button')}</button>
+                            <span> {t('ui.orgs.token_label',{value: inv.token})}</span>
                           </>
                         )}
                       </li>
@@ -640,9 +638,9 @@ export function Orgs({ token, onSelectOrg }) {
                   </ul>
                 </div>
                 <div>
-                  <div>Transfer ownership</div>
-                  <input placeholder="New admin user ID" value={transferUserId} onChange={e => setTransferUserId(e.target.value)} />
-                  <button onClick={() => transfer(org.id)}>Transfer</button>
+                  <div>{t('ui.orgs.transfer_heading')}</div>
+                  <input placeholder={t('ui.orgs.new_admin_placeholder')} value={transferUserId} onChange={e => setTransferUserId(e.target.value)} />
+                  <button onClick={() => transfer(org.id)}>{t('ui.orgs.transfer_button')}</button>
                 </div>
               </div>
             )}
@@ -650,7 +648,7 @@ export function Orgs({ token, onSelectOrg }) {
         ))}
       </ul>
       <div>
-        <button onClick={acceptInvite}>Accept invite (paste token)</button>
+        <button onClick={acceptInvite}>{t('ui.orgs.accept_invite_button')}</button>
       </div>
     </section>
   )

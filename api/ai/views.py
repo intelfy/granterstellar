@@ -91,7 +91,11 @@ def _rate_limit_check(request, endpoint_type: str) -> Optional[Response]:
                     cache.add(bucket_key, 0, 65)  # expire slightly over 60s window
                     current = 0
                 if isinstance(current, int) and current >= limit:
-                    resp = Response({"error": "rate_limited", "retry_after": 30}, status=429)
+                    resp = Response({
+                        "error": "rate_limited",
+                        "retry_after": 30,
+                        "message": t("errors.ai.rate_limited", retry_after=30),
+                    }, status=429)
                     resp["Retry-After"] = "30"
                     resp["X-Rate-Limit-Limit"] = str(limit)
                     resp["X-Rate-Limit-Remaining"] = "0"
@@ -115,7 +119,11 @@ def _rate_limit_check(request, endpoint_type: str) -> Optional[Response]:
         ).count()
         if recent >= limit:
             retry_after = 30
-            resp = Response({"error": "rate_limited", "retry_after": retry_after}, status=429)
+            resp = Response({
+                "error": "rate_limited",
+                "retry_after": retry_after,
+                "message": t("errors.ai.rate_limited", retry_after=retry_after),
+            }, status=429)
             resp["Retry-After"] = str(retry_after)
             resp["X-Rate-Limit-Limit"] = str(limit)
             resp["X-Rate-Limit-Remaining"] = "0"
@@ -146,6 +154,7 @@ def _rate_limit_check(request, endpoint_type: str) -> Optional[Response]:
                 "error": "quota_exceeded",
                 "reason": "ai_daily_request_cap",
                 "retry_after": 3600,
+                "message": t("errors.ai.quota_daily_reached"),
             }, status=429)
             resp["X-AI-Daily-Cap"] = str(daily_cap)
             resp["X-AI-Daily-Used"] = str(day_count)
@@ -174,6 +183,7 @@ def _rate_limit_check(request, endpoint_type: str) -> Optional[Response]:
                 resp = Response({
                     "error": "quota_exceeded",
                     "reason": "ai_monthly_tokens_cap",
+                    "message": t("errors.ai.quota_monthly_tokens_reached"),
                 }, status=429)
                 resp["X-AI-Monthly-Token-Cap"] = str(monthly_cap)
                 resp["X-AI-Monthly-Token-Used"] = str(token_sum)
@@ -524,9 +534,9 @@ def format(request):
 def job_status(request, job_id: int):
     job = AIJob.objects.filter(id=job_id).first()
     if not job:
-        return Response({"error": "not_found"}, status=404)
+        return Response({"error": "not_found", "message": t("errors.ai.not_found")}, status=404)
     return Response({
-    "id": job.id,  # type: ignore[attr-defined]
+        "id": job.id,  # type: ignore[attr-defined]
         "type": job.type,
         "status": job.status,
         "result": job.result_json,

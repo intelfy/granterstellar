@@ -5,7 +5,7 @@ Incrementally replace literals with keys in `locales/en.yml` using backend `t()`
 ## Backend (Django)
 
 - [ ] `api/accounts/`
-- [ ] `api/ai/views.py`
+- [x] `api/ai/views.py` (gating + quota + revision cap + not_found localized)
 - [ ] `api/ai/tasks.py`
 - [ ] `api/ai/prompting.py`
 - [ ] `api/ai/diff_engine.py` (user-facing diffs? minimal)
@@ -32,6 +32,16 @@ Incrementally replace literals with keys in `locales/en.yml` using backend `t()`
 - [ ] `web/src/hooks/` (user messages, toasts)
 - [ ] `web/src/utils/` (validation errors surfaced to users)
 - [ ] `web/src/pages/` if present
+
+### Detailed Frontend Progress
+
+- [x] `web/src/pages/AccountPage.jsx` (all labels, buttons, status + error codes mapped to keys)
+- [ ] `web/src/components/MemorySuggestions.jsx` (pending extraction of heading, loading, empty, error, insert, uses, refresh)
+- [ ] `web/src/components/SectionDiff.jsx` (pending extraction of headings: Changes, Previous, Draft)
+- [ ] `web/src/pages/Dashboard.jsx` (large set: proposal actions, formatting, file attachments, archive/unarchive, export, etc.)
+- [ ] `web/src/pages/BillingPage.jsx`
+- [ ] `web/src/pages/OrgsPage.jsx`
+- [ ] `web/src/pages/Auth.jsx` (login/register/oauth flows, error messages, banners)
 
 ## Shared / Root
 

@@ -31,7 +31,11 @@ const keysEntries = Object.entries(flat)
   .map(([k, v]) => `  '${k}': ${JSON.stringify(v)},`)
   .join('\n');
 
-const file = `/** AUTO-GENERATED: DO NOT EDIT. Source: locales/en.yml */\nexport const KEYS = {\n${keysEntries}\n} as const;\n\nexport type Key = keyof typeof KEYS;\n\nexport function t(key: Key, params?: Record<string, string | number>): string {\n  let msg = KEYS[key];\n  if (!params) return msg;\n  return msg.replace(/\\{(\\w+)\\}/g, (_, p) => (p in params ? String(params[p]) : '{' + p + '}'));\n}\n`;
+const file = `/** AUTO-GENERATED: DO NOT EDIT. Source: locales/en.yml */\nexport const KEYS = {\n${keysEntries}\n} as const;\n\nexport type Key = keyof typeof KEYS;\n\n/**
+ * Translate a key. If the key is unexpectedly missing (should not happen if generated),
+ * returns the key string itself to avoid runtime crashes.
+ * Supports simple {placeholder} interpolation.
+ */\nexport function t(key: Key | string, params?: Record<string, string | number>): string {\n  if (!(key in KEYS)) return String(key);\n  let msg = KEYS[key as Key];\n  if (!params) return msg;\n  return msg.replace(/\\{(\\w+)\\}/g, (_, p) => (p in params ? String(params[p]) : '{' + p + '}'));\n}\n`;
 
 writeFileSync(outFile, file);
 console.log(`Generated ${outFile} (${Object.keys(flat).length} keys)`);

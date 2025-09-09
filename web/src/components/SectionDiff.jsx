@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { t } from '../keys.generated'
 
 export default function SectionDiff({ before = '', after = '' }) {
   if (!before && !after) return null
@@ -33,17 +34,17 @@ export default function SectionDiff({ before = '', after = '' }) {
 
   return (
     <div>
-      <div>Changes</div>
+      <div>{t('ui.diff.heading')}</div>
       <div style={{ border: '1px solid #ddd', padding: 8 }}>
         {tokens.map(wrap)}
       </div>
       <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
         <div style={{ flex: 1 }}>
-          <div>Previous</div>
+          <div>{t('ui.diff.previous')}</div>
           <pre>{before || '—'}</pre>
         </div>
         <div style={{ flex: 1 }}>
-          <div>Draft</div>
+          <div>{t('ui.diff.draft')}</div>
           <pre>{after || '—'}</pre>
         </div>
       </div>

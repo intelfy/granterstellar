@@ -43,3 +43,6 @@ __pycache__/
 # Ignore stray Python build artifacts
 *.pyo
 *.pyd
+
+# VSCode local settings (avoid leaking any editor stored secrets)
+.vscode/
