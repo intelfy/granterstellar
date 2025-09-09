@@ -6,7 +6,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ('billing', '0003_subscription_seats'),
         ('orgs', '0004_orgproposalallocation'),
@@ -20,17 +19,40 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('month', models.DateField()),
                 ('proposals', models.IntegerField(default=0)),
-                ('owner_org', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='extra_credits', to='orgs.organization')),
-                ('owner_user', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='extra_credits', to=settings.AUTH_USER_MODEL)),
+                (
+                    'owner_org',
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name='extra_credits',
+                        to='orgs.organization',
+                    ),
+                ),
+                (
+                    'owner_user',
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name='extra_credits',
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
         ),
         migrations.AddConstraint(
             model_name='extracredits',
-            constraint=models.CheckConstraint(check=models.Q(('owner_user__isnull', True), ('owner_org__isnull', True), _negated=True), name='extra_owner_present'),
+            constraint=models.CheckConstraint(
+                check=models.Q(('owner_user__isnull', True), ('owner_org__isnull', True), _negated=True),
+                name='extra_owner_present',
+            ),
         ),
         migrations.AddConstraint(
             model_name='extracredits',
-            constraint=models.CheckConstraint(check=models.Q(('owner_user__isnull', False), ('owner_org__isnull', False), _negated=True), name='extra_owner_xor'),
+            constraint=models.CheckConstraint(
+                check=models.Q(('owner_user__isnull', False), ('owner_org__isnull', False), _negated=True), name='extra_owner_xor'
+            ),
         ),
         migrations.AddConstraint(
             model_name='extracredits',

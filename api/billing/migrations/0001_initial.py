@@ -6,7 +6,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -21,21 +20,64 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('stripe_customer_id', models.CharField(blank=True, default='', max_length=64)),
                 ('stripe_subscription_id', models.CharField(blank=True, default='', max_length=64)),
-                ('tier', models.CharField(choices=[('free', 'Free'), ('pro', 'Pro'), ('enterprise', 'Enterprise')], default='free', max_length=16)),
-                ('status', models.CharField(choices=[('active', 'Active'), ('trialing', 'Trialing'), ('past_due', 'Past Due'), ('canceled', 'Canceled'), ('incomplete', 'Incomplete'), ('incomplete_expired', 'Incomplete Expired')], default='incomplete', max_length=32)),
+                (
+                    'tier',
+                    models.CharField(
+                        choices=[('free', 'Free'), ('pro', 'Pro'), ('enterprise', 'Enterprise')], default='free', max_length=16
+                    ),
+                ),
+                (
+                    'status',
+                    models.CharField(
+                        choices=[
+                            ('active', 'Active'),
+                            ('trialing', 'Trialing'),
+                            ('past_due', 'Past Due'),
+                            ('canceled', 'Canceled'),
+                            ('incomplete', 'Incomplete'),
+                            ('incomplete_expired', 'Incomplete Expired'),
+                        ],
+                        default='incomplete',
+                        max_length=32,
+                    ),
+                ),
                 ('current_period_end', models.DateTimeField(blank=True, null=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('owner_org', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='subscriptions', to='orgs.organization')),
-                ('owner_user', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='subscriptions', to=settings.AUTH_USER_MODEL)),
+                (
+                    'owner_org',
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name='subscriptions',
+                        to='orgs.organization',
+                    ),
+                ),
+                (
+                    'owner_user',
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name='subscriptions',
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
         ),
         migrations.AddConstraint(
             model_name='subscription',
-            constraint=models.CheckConstraint(check=models.Q(('owner_user__isnull', True), ('owner_org__isnull', True), _negated=True), name='subscription_owner_present'),
+            constraint=models.CheckConstraint(
+                check=models.Q(('owner_user__isnull', True), ('owner_org__isnull', True), _negated=True),
+                name='subscription_owner_present',
+            ),
         ),
         migrations.AddConstraint(
             model_name='subscription',
-            constraint=models.CheckConstraint(check=models.Q(('owner_user__isnull', False), ('owner_org__isnull', False), _negated=True), name='subscription_owner_xor'),
+            constraint=models.CheckConstraint(
+                check=models.Q(('owner_user__isnull', False), ('owner_org__isnull', False), _negated=True),
+                name='subscription_owner_xor',
+            ),
         ),
     ]

@@ -28,9 +28,9 @@ def run_plan(job_id: int):
         validation = {}
         try:
             validate_role_output('plan', plan)
-            validation = {"plan_valid": True}
+            validation = {'plan_valid': True}
         except SchemaError as ve:  # pragma: no cover - simple failure path
-            validation = {"plan_valid": False, "error": str(ve)[:200]}
+            validation = {'plan_valid': False, 'error': str(ve)[:200]}
         # Render and store prompt snapshot
         try:
             rp = render_role_prompt(
@@ -43,15 +43,16 @@ def run_plan(job_id: int):
             # Recompute redaction with mapping for persisted context
             redacted, red_map = AIJobContext.redact_with_mapping(rp.rendered)
             from .models import AIPromptTemplate as _PT  # local import to avoid circular
+
             template_sha = _PT.compute_checksum(rp.template.template) if rp.template else ''
             AIJobContext.objects.create(
                 job=job,
                 prompt_template=rp.template,
                 prompt_version=rp.template.version if rp.template else 1,
                 rendered_prompt_redacted=redacted,
-                model_params={"deterministic": True},
+                model_params={'deterministic': True},
                 snippet_ids=[s['chunk_id'] for s in snippets],
-                retrieval_metrics={"snippet_count": len(snippets), **validation},
+                retrieval_metrics={'snippet_count': len(snippets), **validation},
                 template_sha256=template_sha,
                 redaction_map=red_map,
             )
@@ -59,9 +60,9 @@ def run_plan(job_id: int):
             AIJobContext.objects.create(
                 job=job,
                 rendered_prompt_redacted=AIJobContext.redact(f'PLAN TEMPLATE ERROR: {pe}')[:5000],
-                model_params={"deterministic": True},
+                model_params={'deterministic': True},
                 snippet_ids=[s['chunk_id'] for s in snippets],
-                retrieval_metrics={"snippet_count": len(snippets), **validation},
+                retrieval_metrics={'snippet_count': len(snippets), **validation},
             )
         # Extract blueprint (same logic as sync endpoint) and materialize sections if proposal id present.
         created_sections: list[str] = []
@@ -78,10 +79,10 @@ def run_plan(job_id: int):
                 mat = materialize_sections(proposal_id=int(proposal_id_val), blueprint=blueprint)
                 created_sections = [s.key for (s, c) in mat if c]
         except Exception as me:  # pragma: no cover - defensive
-            created_sections = ["error:" + str(me)[:120]]
+            created_sections = ['error:' + str(me)[:120]]
         job.result_json = {  # type: ignore[assignment]
-            "plan": plan,
-            "created_sections": created_sections,
+            'plan': plan,
+            'created_sections': created_sections,
         }
         job.status = 'done'
         dt_ms = int((time.time() - t0) * 1000)
@@ -127,7 +128,7 @@ def run_write(job_id: int):
         t0 = time.time()
         det_setting = getattr(settings, 'AI_DETERMINISTIC_SAMPLING', True)
         try:
-            det_default = bool(False if str(det_setting) in ("0", "false", "False") else det_setting)
+            det_default = bool(False if str(det_setting) in ('0', 'false', 'False') else det_setting)
         except Exception:
             det_default = True
         section_id = job.input_json.get('section_id') or ''
@@ -143,7 +144,7 @@ def run_write(job_id: int):
 
         # Retrieval & (future) budgeting
         res_snippets = retrieval.retrieve_for_section(section_id, job.input_json.get('answers') or {})
-        allocation = {"snippets": res_snippets}  # placeholder until context budgeting integrated here
+        allocation = {'snippets': res_snippets}  # placeholder until context budgeting integrated here
 
         # Provider call
         res = prov.write(
@@ -156,10 +157,10 @@ def run_write(job_id: int):
         # Validation
         validation = {}
         try:
-            validate_role_output('write', {"draft": res.text})
-            validation = {"write_valid": True}
+            validate_role_output('write', {'draft': res.text})
+            validation = {'write_valid': True}
         except SchemaError as ve:  # pragma: no cover
-            validation = {"write_valid": False, "error": str(ve)[:200]}
+            validation = {'write_valid': False, 'error': str(ve)[:200]}
 
         # Persist prompt context
         try:
@@ -173,17 +174,18 @@ def run_write(job_id: int):
             )
             redacted, red_map = AIJobContext.redact_with_mapping(rp.rendered)
             from .models import AIPromptTemplate as _PT
+
             template_sha = _PT.compute_checksum(rp.template.template) if rp.template else ''
             AIJobContext.objects.create(
                 job=job,
                 prompt_template=rp.template,
                 prompt_version=rp.template.version if rp.template else 1,
                 rendered_prompt_redacted=redacted,
-                model_params={"deterministic": det_default},
+                model_params={'deterministic': det_default},
                 snippet_ids=[s['chunk_id'] for s in res_snippets],
                 retrieval_metrics={
-                    "snippet_count": len(res_snippets),
-                    "used_snippets": len(allocation['snippets']),
+                    'snippet_count': len(res_snippets),
+                    'used_snippets': len(allocation['snippets']),
                     **validation,
                 },
                 template_sha256=template_sha,
@@ -193,20 +195,20 @@ def run_write(job_id: int):
             AIJobContext.objects.create(
                 job=job,
                 rendered_prompt_redacted=AIJobContext.redact(f'WRITE TEMPLATE ERROR: {pe}')[:5000],
-                model_params={"deterministic": det_default},
+                model_params={'deterministic': det_default},
                 snippet_ids=[s['chunk_id'] for s in res_snippets],
                 retrieval_metrics={
-                    "snippet_count": len(res_snippets),
-                    "used_snippets": len(allocation['snippets']),
+                    'snippet_count': len(res_snippets),
+                    'used_snippets': len(allocation['snippets']),
                     **validation,
                 },
             )
 
         # Result & persistence
         job.result_json = {  # type: ignore[assignment]
-            "draft_text": res.text,
-            "assets": [],
-            "tokens_used": res.usage_tokens,
+            'draft_text': res.text,
+            'assets': [],
+            'tokens_used': res.usage_tokens,
         }
         section = get_section(section_id)
         if section:
@@ -261,7 +263,7 @@ def run_revise(job_id: int):
         t0 = time.time()
         det_setting = getattr(settings, 'AI_DETERMINISTIC_SAMPLING', True)
         try:
-            det_default = bool(False if str(det_setting) in ("0", "false", "False") else det_setting)
+            det_default = bool(False if str(det_setting) in ('0', 'false', 'False') else det_setting)
         except Exception:
             det_default = True
         section_locked = False
@@ -291,9 +293,15 @@ def run_revise(job_id: int):
                     job.save(update_fields=['status', 'error_text'])
                     try:
                         AIMetric.objects.create(
-                            type='revise', model_id='revision_cap_blocked', duration_ms=0, tokens_used=0,
-                            success=False, created_by=job.created_by, org_id=job.org_id,
-                            proposal_id=job.input_json.get('proposal_id'), section_id=sec_id,
+                            type='revise',
+                            model_id='revision_cap_blocked',
+                            duration_ms=0,
+                            tokens_used=0,
+                            success=False,
+                            created_by=job.created_by,
+                            org_id=job.org_id,
+                            proposal_id=job.input_json.get('proposal_id'),
+                            section_id=sec_id,
                             error_text='revision_cap_reached',
                         )
                     except Exception:
@@ -303,9 +311,9 @@ def run_revise(job_id: int):
             pass
         rev_snippets = retrieval.retrieve_for_section(
             job.input_json.get('section_id') or '',
-            {"change_request": job.input_json.get('change_request') or ''},
+            {'change_request': job.input_json.get('change_request') or ''},
         )
-        allocation = {"snippets": rev_snippets}
+        allocation = {'snippets': rev_snippets}
         base_text = job.input_json.get('base_text') or ''
         section_id = job.input_json.get('section_id') or ''
         res = prov.revise(
@@ -317,10 +325,10 @@ def run_revise(job_id: int):
         diff_res = diff_texts(base_text, res.text)
         validation = {}
         try:
-            validate_role_output('revise', {"revised": res.text, "diff": diff_res})
-            validation = {"revise_valid": True}
+            validate_role_output('revise', {'revised': res.text, 'diff': diff_res})
+            validation = {'revise_valid': True}
         except SchemaError as ve:  # pragma: no cover
-            validation = {"revise_valid": False, "error": str(ve)[:200]}
+            validation = {'revise_valid': False, 'error': str(ve)[:200]}
         try:
             rp = render_role_prompt(
                 role='reviser',
@@ -333,18 +341,19 @@ def run_revise(job_id: int):
             )
             redacted, red_map = AIJobContext.redact_with_mapping(rp.rendered)
             from .models import AIPromptTemplate as _PT
+
             template_sha = _PT.compute_checksum(rp.template.template) if rp.template else ''
             AIJobContext.objects.create(
                 job=job,
                 prompt_template=rp.template,
                 prompt_version=rp.template.version if rp.template else 1,
                 rendered_prompt_redacted=redacted,
-                model_params={"deterministic": det_default},
+                model_params={'deterministic': det_default},
                 snippet_ids=[s['chunk_id'] for s in rev_snippets],
                 retrieval_metrics={
-                    "snippet_count": len(rev_snippets),
-                    "used_snippets": len(allocation['snippets']),
-                    "change_ratio": round(diff_res.get('change_ratio', 0), 4),
+                    'snippet_count': len(rev_snippets),
+                    'used_snippets': len(allocation['snippets']),
+                    'change_ratio': round(diff_res.get('change_ratio', 0), 4),
                     **validation,
                 },
                 template_sha256=template_sha,
@@ -354,16 +363,16 @@ def run_revise(job_id: int):
             AIJobContext.objects.create(
                 job=job,
                 rendered_prompt_redacted=AIJobContext.redact(f'REVISE TEMPLATE ERROR: {pe}')[:5000],
-                model_params={"deterministic": det_default},
+                model_params={'deterministic': det_default},
                 snippet_ids=[s['chunk_id'] for s in rev_snippets],
                 retrieval_metrics={
-                    "snippet_count": len(rev_snippets),
-                    "used_snippets": len(allocation['snippets']),
-                    "change_ratio": round(diff_res.get('change_ratio', 0), 4),
+                    'snippet_count': len(rev_snippets),
+                    'used_snippets': len(allocation['snippets']),
+                    'change_ratio': round(diff_res.get('change_ratio', 0), 4),
                     **validation,
                 },
             )
-        job.result_json = {"draft_text": res.text, "diff": diff_res}  # type: ignore[assignment]
+        job.result_json = {'draft_text': res.text, 'diff': diff_res}  # type: ignore[assignment]
         # Apply revision to section (keep as draft, don't auto-promote)
         section = get_section(section_id)
         if section:
@@ -434,10 +443,10 @@ def run_format(job_id: int):
         )
         validation = {}
         try:
-            validate_role_output('format', {"formatted_markdown": res.text})
-            validation = {"format_valid": True}
+            validate_role_output('format', {'formatted_markdown': res.text})
+            validation = {'format_valid': True}
         except SchemaError as ve:  # pragma: no cover
-            validation = {"format_valid": False, "error": str(ve)[:200]}
+            validation = {'format_valid': False, 'error': str(ve)[:200]}
         try:
             rp = render_role_prompt(
                 role='formatter',
@@ -448,15 +457,16 @@ def run_format(job_id: int):
             )
             redacted, red_map = AIJobContext.redact_with_mapping(rp.rendered)
             from .models import AIPromptTemplate as _PT
+
             template_sha = _PT.compute_checksum(rp.template.template) if rp.template else ''
             AIJobContext.objects.create(
                 job=job,
                 prompt_template=rp.template,
                 prompt_version=rp.template.version if rp.template else 1,
                 rendered_prompt_redacted=redacted,
-                model_params={"deterministic": True},
+                model_params={'deterministic': True},
                 snippet_ids=[s['chunk_id'] for s in fmt_snippets],
-                retrieval_metrics={"snippet_count": 0, **validation},
+                retrieval_metrics={'snippet_count': 0, **validation},
                 template_sha256=template_sha,
                 redaction_map=red_map,
             )
@@ -464,11 +474,11 @@ def run_format(job_id: int):
             AIJobContext.objects.create(
                 job=job,
                 rendered_prompt_redacted=AIJobContext.redact(f'FORMAT TEMPLATE ERROR: {pe}')[:5000],
-                model_params={"deterministic": True},
+                model_params={'deterministic': True},
                 snippet_ids=[s['chunk_id'] for s in fmt_snippets],
-                retrieval_metrics={"snippet_count": 0, **validation},
+                retrieval_metrics={'snippet_count': 0, **validation},
             )
-        job.result_json = {"formatted_text": res.text}  # type: ignore[assignment]
+        job.result_json = {'formatted_text': res.text}  # type: ignore[assignment]
         job.status = 'done'
         dt_ms = int((time.time() - t0) * 1000)
         try:

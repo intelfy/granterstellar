@@ -11,6 +11,7 @@ Policy (initial):
 
 Future extensions: dynamic reservation percentages, semantic tag buckets, refined token estimator.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -61,7 +62,7 @@ def apply_context_budget(
         out: list[dict[str, Any]] = []
         used = 0
         for it in items:
-            t = it.get("token_len") or _approx_tokens(it.get("text"))
+            t = it.get('token_len') or _approx_tokens(it.get('text'))
             if used + t > token_cap:
                 break
             used += t
@@ -101,4 +102,4 @@ def apply_context_budget(
     )
 
 
-__all__ = ["apply_context_budget", "BudgetResult"]
+__all__ = ['apply_context_budget', 'BudgetResult']

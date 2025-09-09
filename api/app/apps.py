@@ -10,6 +10,7 @@ class AppUtilitiesConfig(AppConfig):
         # Initialize centralized copy keys
         try:  # pragma: no cover - defensive
             from .common import keys
+
             keys.ready()
         except Exception:
             pass

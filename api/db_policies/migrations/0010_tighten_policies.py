@@ -1,6 +1,6 @@
 from django.db import migrations
 
-SQL = r'''
+SQL = r"""
 -- Tighten RLS policies: ensure anonymous sessions (no current_user_id) see nothing;
 -- block member-level writes unless admin role/org matches; narrow proposal visibility.
 
@@ -97,13 +97,15 @@ CREATE POLICY subscriptions_write ON billing_subscription
             )
         )
     );
-'''
+"""
+
 
 def forwards(apps, schema_editor):
     if schema_editor.connection.vendor != 'postgresql':
         return
     with schema_editor.connection.cursor() as cur:
         cur.execute(SQL)
+
 
 class Migration(migrations.Migration):
     dependencies = [

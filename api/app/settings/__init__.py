@@ -3,6 +3,7 @@
 Select settings module via DJANGO_ENV (dev, prod, test). Falls back to base.
 Keeps backward compatibility with existing 'app.settings' reference.
 """
+
 import os
 from .base import *  # noqa: F401,F403
 

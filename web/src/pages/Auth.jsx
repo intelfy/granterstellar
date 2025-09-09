@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { api, apiBase, isProd, sanitizeNext, ROUTER_BASE } from '../lib/core.js'
+import { t } from '../keys.generated'
 
 export function InviteBanner({ token }) {
   const location = useLocation()
@@ -27,7 +28,7 @@ export function InviteBanner({ token }) {
   if (!token || !pending) return null
   return (
     <div data-testid="invite-banner" role="region" aria-label="org-invite">
-      <span>Organization invite detected.</span>
+  <span>{t('ui.auth.invite_banner_detected')}</span>
       <button
         type="button"
         data-testid="invite-accept"
@@ -37,17 +38,17 @@ export function InviteBanner({ token }) {
             clearParam()
             setPending('')
             navigate('/', { replace: true })
-            alert('Invite accepted')
+    alert(t('ui.auth.invite_accept_success'))
           } catch (e) {
-            alert('Invite accept failed: ' + (e?.data?.error || e.message))
+    alert(`${t('ui.auth.invite_accept_failed_prefix')} ${e?.data?.error || e.message}`)
           }
         }}
-      >Accept invite</button>
+  >{t('ui.auth.invite_accept_button')}</button>
       <button
         type="button"
         data-testid="invite-dismiss"
         onClick={() => { clearParam(); setPending('') }}
-      >Not now</button>
+  >{t('ui.auth.invite_not_now_button')}</button>
     </div>
   )
 }
@@ -83,7 +84,7 @@ export function LoginPage({ token, setToken }) {
         missing_access_token: 'Provider did not return an access token.',
         oauth_not_configured: 'OAuth is not configured on the server.',
       }
-      setOauthError(map[code] || err || 'Sign-in failed. Please try again.')
+      setOauthError(map[code] || err || t('ui.auth.sign_in_failed_generic'))
       url.searchParams.delete('oauth_error')
       url.searchParams.delete('oauth_code')
       window.history.replaceState({}, '', url.toString())
@@ -128,7 +129,7 @@ export function LoginPage({ token, setToken }) {
   }
   const onGoogleDebug = async (e) => {
     e.preventDefault()
-    if (!email) return alert('Enter email for debug OAuth')
+  if (!email) return alert(t('ui.auth.enter_email_debug_oauth'))
     try {
       const params = new URLSearchParams({ code: 'x', email })
       const res = await fetch(`${apiBase}/oauth/google/callback`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString() })
@@ -144,19 +145,19 @@ export function LoginPage({ token, setToken }) {
           navigate(safeNext, { replace: true })
         }
       }
-    } catch { alert('Debug OAuth failed') }
+  } catch { alert(t('ui.auth.debug_oauth_failed')) }
   }
   return (
     <div>
-      <h1>Granterstellar</h1>
+  <h1>{t('ui.auth.app_name')}</h1>
       {!isProd && (
         <form onSubmit={onLogin}>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username" />
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="password" />
-          <button type="submit">Login</button>
+      <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder={t('ui.auth.username_placeholder')} />
+      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('ui.auth.password_placeholder')} />
+      <button type="submit">{t('ui.auth.login_button')}</button>
         </form>
       )}
-      <button type="button" onClick={onGoogleStart}>Sign in with Google</button>
+    <button type="button" onClick={onGoogleStart}>{t('ui.auth.sign_in_google')}</button>
       <button type="button" onClick={async () => {
         try {
           if (safeNext) sessionStorage.setItem('postLoginNext', safeNext)
@@ -173,7 +174,7 @@ export function LoginPage({ token, setToken }) {
             } catch {}
           }
         } catch {}
-      }}>Sign in with GitHub</button>
+  }}>{t('ui.auth.sign_in_github')}</button>
       <button type="button" onClick={async () => {
         try {
           if (safeNext) sessionStorage.setItem('postLoginNext', safeNext)
@@ -190,21 +191,21 @@ export function LoginPage({ token, setToken }) {
             } catch {}
           }
         } catch {}
-      }}>Sign in with Facebook</button>
+      }}>{t('ui.auth.sign_in_facebook')}</button>
       {!isProd && (
         <form onSubmit={onGoogleDebug}>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="debug: you@example.com" />
-          <button type="submit">Debug Google Login</button>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t('ui.auth.debug_email_placeholder')} />
+          <button type="submit">{t('ui.auth.debug_google_button')}</button>
         </form>
       )}
       {oauthError && (
         <div>{oauthError}</div>
       )}
       {!isProd && (
-        <button type="button" onClick={() => navigate('/register')}>Create an account</button>
+        <button type="button" onClick={() => navigate('/register')}>{t('ui.auth.create_account_button')}</button>
       )}
       {token && pendingInvite && (
-        <button type="button" onClick={async () => { try { await api('/orgs/invites/accept', { method: 'POST', token, body: { token: pendingInvite } }); alert('Invite accepted'); try { const url = new URL(window.location.href); url.searchParams.delete('invite'); const path = `${url.pathname}${url.search}${url.hash}`; navigate(path, { replace: true }) } catch {} setPendingInvite('') } catch (e) { alert('Invite accept failed: ' + (e?.data?.error || e.message)) } }}>Accept pending invite</button>
+        <button type="button" onClick={async () => { try { await api('/orgs/invites/accept', { method: 'POST', token, body: { token: pendingInvite } }); alert(t('ui.auth.invite_accept_success')); try { const url = new URL(window.location.href); url.searchParams.delete('invite'); const path = `${url.pathname}${url.search}${url.hash}`; navigate(path, { replace: true }) } catch {} setPendingInvite('') } catch (e) { alert(`${t('ui.auth.invite_accept_failed_prefix')} ${e?.data?.error || e.message}`) } }}>{t('ui.auth.invite_accept_pending_button')}</button>
       )}
     </div>
   )
@@ -265,7 +266,7 @@ export function OAuthCallback({ setToken }) {
       }
     })()
   }, [location.search, navigate, setToken])
-  return <div>Signing you in…</div>
+  return <div>{t('ui.auth.signing_in')}</div>
 }
 
 export function RegisterPage({ token }) {
@@ -302,20 +303,20 @@ export function RegisterPage({ token }) {
 
   return (
     <div>
-      <h2>Complete your registration</h2>
+      <h2>{t('ui.auth.registration_heading')}</h2>
       <form onSubmit={submit}>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
-        <input value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="Organization name (or leave blank if using an invite)" />
-        <input value={invite} onChange={(e) => setInvite(e.target.value)} placeholder="Invite token (optional)" />
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('ui.auth.name_placeholder')} />
+        <input value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder={t('ui.auth.org_name_placeholder')} />
+        <input value={invite} onChange={(e) => setInvite(e.target.value)} placeholder={t('ui.auth.invite_token_placeholder')} />
         {!invite && (
           <div>
-            <div>Choose a plan</div>
-            <label><input type="radio" name="plan" value="free" checked={plan === 'free'} onChange={(e) => setPlan(e.target.value)} /> Free</label>
-            <label><input type="radio" name="plan" value="pro" checked={plan === 'pro'} onChange={(e) => setPlan(e.target.value)} /> Pro</label>
-            <label><input type="radio" name="plan" value="enterprise" checked={plan === 'enterprise'} onChange={(e) => setPlan(e.target.value)} /> Enterprise</label>
+            <div>{t('ui.auth.choose_plan')}</div>
+            <label><input type="radio" name="plan" value="free" checked={plan === 'free'} onChange={(e) => setPlan(e.target.value)} /> {t('ui.auth.plan_free')}</label>
+            <label><input type="radio" name="plan" value="pro" checked={plan === 'pro'} onChange={(e) => setPlan(e.target.value)} /> {t('ui.auth.plan_pro')}</label>
+            <label><input type="radio" name="plan" value="enterprise" checked={plan === 'enterprise'} onChange={(e) => setPlan(e.target.value)} /> {t('ui.auth.plan_enterprise')}</label>
           </div>
         )}
-        <button type="submit" disabled={submitting}>Continue</button>
+        <button type="submit" disabled={submitting}>{t('ui.auth.continue_button')}</button>
       </form>
     </div>
   )

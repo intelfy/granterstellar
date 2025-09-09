@@ -6,8 +6,8 @@ export default [
   // Ignore build artifacts and vendor files
   { ignores: ['dist/**', 'node_modules/**', 'eslint.config.js'] },
   js.configs.recommended,
+  // Global overrides (applies to all matched files)
   {
-  files: ['src/**/*.{js,jsx,ts,tsx}'],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'module',
@@ -20,11 +20,11 @@ export default [
         sessionStorage: 'readonly',
         navigator: 'readonly',
         fetch: 'readonly',
-    Response: 'readonly',
-    Request: 'readonly',
-    Headers: 'readonly',
-    FormData: 'readonly',
-    File: 'readonly',
+        Response: 'readonly',
+        Request: 'readonly',
+        Headers: 'readonly',
+        FormData: 'readonly',
+        File: 'readonly',
         alert: 'readonly',
         confirm: 'readonly',
         prompt: 'readonly',
@@ -47,10 +47,9 @@ export default [
       'no-empty': 'off',
       'no-prototype-builtins': 'off',
       'no-control-regex': 'off',
-  'no-misleading-character-class': 'off',
-  'no-console': 'off',
-  // JS-only lint: avoid global/env churn errors
-  'no-undef': 'off',
+      'no-misleading-character-class': 'off',
+      'no-console': 'off',
+      'no-undef': 'off',
     },
   },
   {

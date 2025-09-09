@@ -1,7 +1,7 @@
 from django.db import migrations
 
 
-RLS_SQL = r'''
+RLS_SQL = r"""
 -- Create a dedicated schema for app variables
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'app') THEN
@@ -128,7 +128,7 @@ CREATE POLICY subscriptions_write ON billing_subscription
             )
         )
     );
-'''
+"""
 
 
 def forwards(apps, schema_editor):

@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -24,7 +23,12 @@ class Migration(migrations.Migration):
                 ('error', models.TextField(blank=True, default='')),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('proposal', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='export_jobs', to='proposals.proposal')),
+                (
+                    'proposal',
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name='export_jobs', to='proposals.proposal'
+                    ),
+                ),
             ],
         ),
     ]

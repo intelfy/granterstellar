@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, openDebugLocal, safeOpenExternal, formatDiscount } from '../lib/core.js'
+import { t } from '../keys.generated'
 
 export default function BillingPage({ token }) {
   const [usage, setUsage] = useState(null)
@@ -29,7 +30,7 @@ export default function BillingPage({ token }) {
         }
         await refresh()
       }
-  } catch { setError('Checkout unavailable') } finally { setLoading(false) }
+  } catch { setError(t('ui.dashboard.checkout_unavailable')) } finally { setLoading(false) }
   }
   const openPortal = async () => {
     setLoading(true); setError('')
@@ -45,16 +46,16 @@ export default function BillingPage({ token }) {
           openDebugLocal(res.url)
         }
       }
-  } catch { setError('Portal unavailable') } finally { setLoading(false) }
+  } catch { setError(t('ui.dashboard.portal_unavailable')) } finally { setLoading(false) }
   }
   const onCancel = async () => {
     setLoading(true); setError('')
     try {
       await api('/billing/cancel', { method: 'POST', token, body: {} })
       await refresh()
-      alert('Subscription will cancel at period end.')
+  alert(t('ui.dashboard.subscription_cancelled_schedule'))
   } catch {
-      setError('Cancel failed')
+  setError(t('errors.billing.cancel_failed'))
     } finally { setLoading(false) }
   }
   const onResume = async () => {
@@ -62,46 +63,46 @@ export default function BillingPage({ token }) {
     try {
       await api('/billing/resume', { method: 'POST', token, body: {} })
       await refresh()
-      alert('Subscription resumed.')
+      alert(t('ui.dashboard.subscription_resumed'))
   } catch {
-      setError('Resume failed')
+      setError(t('errors.billing.resume_failed'))
     } finally { setLoading(false) }
   }
   return (
     <section>
-      <h2>Billing</h2>
+      <h2>{t('ui.billing.heading')}</h2>
       {usage && (
         <div>
-          Tier: {usage.tier} · Status: {usage.status}
-          {usage.subscription?.cancel_at_period_end ? ' · Cancel at period end: yes' : ''}
-          {usage.subscription?.current_period_end ? ` · Period ends: ${new Date(usage.subscription.current_period_end).toLocaleDateString()}` : ''}
-          {usage.seats?.capacity ? ` · Seats: ${usage.seats.capacity}` : ''}
+          {t('ui.dashboard.tier_status', { tier: usage.tier, status: usage.status })}
+          {usage.subscription?.cancel_at_period_end ? ` · ${t('ui.billing.cancel_at_period_end_flag')}` : ''}
+          {usage.subscription?.current_period_end ? ` · ${t('ui.dashboard.period_ends', { date: new Date(usage.subscription.current_period_end).toLocaleDateString() })}` : ''}
+          {usage.seats?.capacity ? ` · ${t('ui.billing.seats_line', { count: usage.seats.capacity })}` : ''}
           {usage.subscription?.discount ? (
-            <> · <span data-testid="promo-banner" aria-label="active-promo">Promo: {formatDiscount(usage.subscription.discount)}</span></>
+            <> · <span data-testid="promo-banner" aria-label="active-promo">{t('ui.dashboard.promo_active', { discount: formatDiscount(usage.subscription.discount) })}</span></>
           ) : ''}
         </div>
       )}
       <div>
         <div>
-          <label>Coupon/Promotion code (optional): </label>
-          <input value={coupon} onChange={(e) => setCoupon(e.target.value)} placeholder="SUMMER100" />
+          <label>{t('ui.billing.coupon_label')} </label>
+          <input value={coupon} onChange={(e) => setCoupon(e.target.value)} placeholder={t('ui.billing.coupon_placeholder')} />
         </div>
         <div>
-          <label>Price ID (optional): </label>
-          <input value={priceId} onChange={(e) => setPriceId(e.target.value)} placeholder="price_123... (test)" />
+          <label>{t('ui.billing.price_id_label')} </label>
+          <input value={priceId} onChange={(e) => setPriceId(e.target.value)} placeholder={t('ui.billing.price_id_placeholder')} />
         </div>
         <div>
-          <label>Seats (quantity): </label>
+          <label>{t('ui.billing.seats_label')} </label>
           <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(e.target.value)} style={{ width: 80 }} />
         </div>
       </div>
       <div>
-        <button onClick={startCheckout} disabled={loading}>Upgrade (Checkout)</button>
-        <button onClick={openPortal} disabled={loading}>Open Billing Portal</button>
+        <button onClick={startCheckout} disabled={loading}>{t('ui.dashboard.upgrade_button')}</button>
+        <button onClick={openPortal} disabled={loading}>{t('ui.dashboard.billing_portal_button')}</button>
         {usage?.subscription?.cancel_at_period_end ? (
-          <button onClick={onResume} disabled={loading}>Resume</button>
+          <button onClick={onResume} disabled={loading}>{t('ui.dashboard.resume_button')}</button>
         ) : (
-          <button onClick={onCancel} disabled={loading}>Cancel at period end</button>
+          <button onClick={onCancel} disabled={loading}>{t('ui.dashboard.cancel_at_period_end_button')}</button>
         )}
       </div>
       {error && <div>{error}</div>}

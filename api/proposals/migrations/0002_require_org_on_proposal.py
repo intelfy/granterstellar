@@ -12,7 +12,7 @@ def noop(apps, schema_editor):  # Pure placeholder to satisfy historical merge
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("proposals", "0001_initial"),
+        ('proposals', '0001_initial'),
     ]
 
     operations = [

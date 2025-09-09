@@ -7,7 +7,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ('orgs', '0003_rename_org_email_idx_orgs_orginv_org_id_f879b0_idx'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
@@ -20,8 +19,18 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('month', models.DateField(default=datetime.date.today)),
                 ('allocation', models.IntegerField(default=0)),
-                ('admin', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='org_allocations', to=settings.AUTH_USER_MODEL)),
-                ('org', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='admin_allocations', to='orgs.organization')),
+                (
+                    'admin',
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name='org_allocations', to=settings.AUTH_USER_MODEL
+                    ),
+                ),
+                (
+                    'org',
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name='admin_allocations', to='orgs.organization'
+                    ),
+                ),
             ],
             options={
                 'unique_together': {('admin', 'org', 'month')},

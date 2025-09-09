@@ -24,10 +24,17 @@ class DiscountWebhookTests(TestCase):
 
     def test_subscription_updated_discount_removed_clears(self):
         # Seed with an existing discount first via queryset update to avoid type checker noise
-        Subscription.objects.filter(pk=self.sub.pk).update(discount={
-            'source': 'coupon', 'id': 'coupon_1', 'percent_off': 10, 'amount_off': None,
-            'currency': 'usd', 'duration': 'once', 'duration_in_months': 1,
-        })
+        Subscription.objects.filter(pk=self.sub.pk).update(
+            discount={
+                'source': 'coupon',
+                'id': 'coupon_1',
+                'percent_off': 10,
+                'amount_off': None,
+                'currency': 'usd',
+                'duration': 'once',
+                'duration_in_months': 1,
+            }
+        )
         evt = {
             'type': 'customer.subscription.updated',
             'data': {
@@ -39,7 +46,7 @@ class DiscountWebhookTests(TestCase):
                     'discount': None,
                     'metadata': {'user_id': str(self.user.pk)},
                 }
-            }
+            },
         }
         resp = self.post_event(evt)
         self.assertEqual(resp.status_code, 200)

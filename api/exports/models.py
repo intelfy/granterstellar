@@ -17,4 +17,4 @@ class ExportJob(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):  # pragma: no cover
-        return f"ExportJob {self.id} {self.format} {self.status}"
+        return f'ExportJob {self.id} {self.format} {self.status}'

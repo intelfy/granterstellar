@@ -2,11 +2,11 @@ Archived on 2025-08-28 — superseded by README.md (overview) and docs/install_g
 
 Note: This is the product vision narrative. For implementation details and current status, see README.md and docs/install_guide.md.
 
-We are building a simple web app to help people apply for grants. We are naming it Granterstellar. We are primarily targeting non-profits and small businesses applying for, for example, Horizon 2020 EU grants. 
+We are building a simple web app to help people apply for grants. We are naming it Granterstellar. We are primarily targeting non-profits and small businesses applying for, for example, Horizon 2020 EU grants.
 
 The software will be subscription-based with a very limited free tier. The idea is to have a fully guided writing process for users. Our form asks a few questions for each section, the user provides their answers (or uploads corresponding files), and our AI prints the specific section for review. The user will then either approve or ask for changes to the section, those will be made, and we then progress to the next section.
 
-When we are done (or any time before then), the user has the option to download their file as an .md file, a .docx, or a .pdf, which they can then submit as their grant proposal. 
+When we are done (or any time before then), the user has the option to download their file as an .md file, a .docx, or a .pdf, which they can then submit as their grant proposal.
 
 The flow will look like this:
 (PLEASE REVIEW AGENT_FLOW.md FOR A MORE TECHNICAL EXPLANATION)

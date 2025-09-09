@@ -1,12 +1,12 @@
 from django.db import migrations
 
 
-SQL = r'''
+SQL = r"""
 DO $$
 BEGIN
     -- Ensure table exists before altering policy
     IF EXISTS (
-        SELECT 1 FROM information_schema.tables 
+        SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = 'proposals_proposal'
     ) THEN
         BEGIN
@@ -30,7 +30,7 @@ BEGIN
     END IF;
 END
 $$;
-'''
+"""
 
 
 def forwards(apps, schema_editor):

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/core.js'
+import { t } from '../keys.generated'
 
 export default function OrgsPage({ token }) {
   const [items, setItems] = useState([])
@@ -26,11 +27,11 @@ export default function OrgsPage({ token }) {
   return (
     <section>
       <div>
-        <h2>Organizations</h2>
+        <h2>{t('ui.orgs.heading')}</h2>
         <div>
-          <input placeholder="New org name" value={name} onChange={e => setName(e.target.value)} />
-          <input placeholder="Description (optional)" value={desc} onChange={e => setDesc(e.target.value)} />
-          <button onClick={createOrg}>Create</button>
+          <input placeholder={t('ui.orgs.new_name_placeholder')} value={name} onChange={e => setName(e.target.value)} />
+          <input placeholder={t('ui.orgs.description_placeholder')} value={desc} onChange={e => setDesc(e.target.value)} />
+          <button onClick={createOrg}>{t('ui.orgs.create_button')}</button>
         </div>
       </div>
       <ul>
@@ -40,39 +41,39 @@ export default function OrgsPage({ token }) {
               <strong>#{org.id}</strong> {org.name}
               <span> {org.description}</span>
               <span> admin: {org.admin?.username}</span>
-              <button onClick={() => { const open = selectedId === String(org.id); setSelectedId(open ? '' : String(org.id)); if (!open) { loadMembers(org.id); loadInvites(org.id) } }}>{selectedId === String(org.id) ? 'Hide' : 'Manage'}</button>
-              <button onClick={() => removeOrg(org.id)}>Delete</button>
+              <button onClick={() => { const open = selectedId === String(org.id); setSelectedId(open ? '' : String(org.id)); if (!open) { loadMembers(org.id); loadInvites(org.id) } }}>{selectedId === String(org.id) ? t('ui.orgs.hide_button') : t('ui.orgs.manage_button')}</button>
+              <button onClick={() => removeOrg(org.id)}>{t('ui.orgs.delete_button')}</button>
             </div>
             {selectedId === String(org.id) && (
               <div>
                 <div>
-                  <div>Members</div>
-                  <div>Invite by email</div>
-                  <input placeholder="name@example.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+                  <div>{t('ui.orgs.members_heading')}</div>
+                  <div>{t('ui.orgs.invite_heading')}</div>
+                  <input placeholder={t('ui.orgs.invite_email_placeholder')} value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
                   <select value={inviteRole} onChange={e => setInviteRole(e.target.value)}>
-                    <option value="member">member</option>
-                    <option value="admin">admin</option>
+                    <option value="member">{t('ui.orgs.member_role_member')}</option>
+                    <option value="admin">{t('ui.orgs.member_role_admin')}</option>
                   </select>
-                  <button onClick={() => inviteMember(org.id)}>Invite</button>
+                  <button onClick={() => inviteMember(org.id)}>{t('ui.orgs.invite_button')}</button>
                 </div>
                 <ul>
                   {(membersByOrg[org.id] || []).map(m => (
                     <li key={m.user.id}>
                       {m.user.username} ({m.user.id}) — {m.role}
-                      <button onClick={() => removeMember(org.id, m.user.id)}>Remove</button>
+                      <button onClick={() => removeMember(org.id, m.user.id)}>{t('ui.orgs.revoke_button')}</button>
                     </li>
                   ))}
                 </ul>
                 <div>
-                  <div>Pending invites</div>
+                  <div>{t('ui.orgs.pending_invites_heading')}</div>
                   <ul>
                     {(invitesByOrg[org.id] || []).map(inv => (
                       <li key={inv.id}>
-                        {inv.email} — {inv.role} {inv.accepted_at ? '(accepted)' : inv.revoked_at ? '(revoked)' : '(pending)'}
+                        {inv.email} — {inv.role} {inv.accepted_at ? t('ui.orgs.accepted') : inv.revoked_at ? t('ui.orgs.revoked') : t('ui.orgs.pending')}
                         {!inv.accepted_at && !inv.revoked_at && (
                           <>
-                            <button onClick={() => revokeInvite(org.id, inv.id)}>Revoke</button>
-                            <span> token: {inv.token}</span>
+                            <button onClick={() => revokeInvite(org.id, inv.id)}>{t('ui.orgs.revoke_button')}</button>
+                            <span> {t('ui.orgs.token_label',{ value: inv.token })}</span>
                           </>
                         )}
                       </li>
@@ -80,9 +81,9 @@ export default function OrgsPage({ token }) {
                   </ul>
                 </div>
                 <div>
-                  <div>Transfer ownership</div>
-                  <input placeholder="New admin user ID" value={transferUserId} onChange={e => setTransferUserId(e.target.value)} />
-                  <button onClick={() => transfer(org.id)}>Transfer</button>
+                  <div>{t('ui.orgs.transfer_heading')}</div>
+                  <input placeholder={t('ui.orgs.new_admin_placeholder')} value={transferUserId} onChange={e => setTransferUserId(e.target.value)} />
+                  <button onClick={() => transfer(org.id)}>{t('ui.orgs.transfer_button')}</button>
                 </div>
               </div>
             )}

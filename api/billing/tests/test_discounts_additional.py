@@ -11,6 +11,7 @@ class DiscountAdditionalTests(TestCase):
     - Idempotent webhook processing (same event shape twice should not change stored discount after first apply)
     - Usage endpoint reflects discount application then removal across events.
     """
+
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_user(username='discuser', password='p')
@@ -41,7 +42,7 @@ class DiscountAdditionalTests(TestCase):
                         },
                     },
                 }
-            }
+            },
         }
         r1 = self._post(evt)
         self.assertEqual(r1.status_code, 200)
@@ -75,9 +76,9 @@ class DiscountAdditionalTests(TestCase):
                             'duration': 'once',
                             'duration_in_months': 1,
                         }
-                    }
+                    },
                 }
-            }
+            },
         }
         self._post(evt_apply)
         self.client.force_login(self.user)
@@ -96,7 +97,7 @@ class DiscountAdditionalTests(TestCase):
                     'metadata': {'user_id': str(self.user.pk), 'tier': 'pro'},
                     'discount': None,
                 }
-            }
+            },
         }
         self._post(evt_remove)
         usage2 = self.client.get('/api/usage').json()['subscription']

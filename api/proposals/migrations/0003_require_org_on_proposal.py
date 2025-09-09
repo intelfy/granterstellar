@@ -14,17 +14,14 @@ def backfill_null_org_proposals(apps, schema_editor):
     Proposal = apps.get_model('proposals', 'Proposal')
 
     # Collect authors with NULL org proposals
-    author_ids = (Proposal.objects
-                  .filter(org__isnull=True)
-                  .values_list('author_id', flat=True)
-                  .distinct())
+    author_ids = Proposal.objects.filter(org__isnull=True).values_list('author_id', flat=True).distinct()
     for author_id in author_ids:
         try:
             user = User.objects.get(pk=author_id)
         except User.DoesNotExist:  # Orphaned proposals; skip (allow delete via cascade later)
             continue
         org = Organization.objects.create(
-            name=f"{user.username} Personal (Migrated)",
+            name=f'{user.username} Personal (Migrated)',
             admin_id=user.id,
         )
         Proposal.objects.filter(org__isnull=True, author_id=author_id).update(org_id=org.id)
@@ -32,20 +29,20 @@ def backfill_null_org_proposals(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("proposals", "0003_merge_enforce_org"),
+        ('proposals', '0003_merge_enforce_org'),
     ]
 
     operations = [
-    migrations.RunPython(backfill_null_org_proposals, migrations.RunPython.noop),
+        migrations.RunPython(backfill_null_org_proposals, migrations.RunPython.noop),
         migrations.AlterField(
-            model_name="proposal",
-            name="org",
+            model_name='proposal',
+            name='org',
             field=models.ForeignKey(
-                to="orgs.organization",
+                to='orgs.organization',
                 on_delete=models.SET_NULL,
                 null=False,
                 blank=False,
-                related_name="proposals",
+                related_name='proposals',
             ),
         ),
     ]

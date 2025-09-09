@@ -1,4 +1,4 @@
-from typing import Dict, Optional, List, Any
+from typing import Any
 
 from .base import BaseProvider, AIResult
 from ai.validators import (
@@ -15,12 +15,12 @@ from ai.diff_engine import diff_texts
 class GeminiProvider(BaseProvider):
     """Gemini stub provider with role output validation wrappers."""
 
-    def plan(self, *, grant_url: str | None, text_spec: str | None) -> Dict:
-        payload: Dict[str, Any] = {
-            "schema_version": "v1",
-            "source": grant_url or "text",
-            "sections": [],  # Gemini stub returns no sections here (alternate planner)
-            "model": "gemini",
+    def plan(self, *, grant_url: str | None, text_spec: str | None) -> dict:
+        payload: dict[str, Any] = {
+            'schema_version': 'v1',
+            'source': grant_url or 'text',
+            'sections': [],  # Gemini stub returns no sections here (alternate planner)
+            'model': 'gemini',
         }
         validate_planner_output(payload)
         return payload
@@ -29,8 +29,8 @@ class GeminiProvider(BaseProvider):
         self,
         *,
         section_id: str,
-        answers: Dict[str, str],
-        file_refs: Optional[List[Dict[str, Any]]] = None,
+        answers: dict[str, str],
+        file_refs: list[dict[str, Any]] | None = None,
         deterministic: bool = False,
     ) -> AIResult:
         budget = apply_context_budget(
@@ -39,19 +39,19 @@ class GeminiProvider(BaseProvider):
             file_refs=file_refs or [],
             model_max_tokens=None,
         )
-        content = "\n".join(f"- {k}: {v}" for k, v in answers.items())
-        det = " deterministic=1" if deterministic else ""
+        content = '\n'.join(f'- {k}: {v}' for k, v in answers.items())
+        det = ' deterministic=1' if deterministic else ''
         ctx = summarize_file_refs(budget.file_refs)
-        payload = {"draft": f"[gemini:formatted{det}] {section_id}\n{content}" + ctx}
+        payload = {'draft': f'[gemini:formatted{det}] {section_id}\n{content}' + ctx}
         validate_writer_output(payload)
-        return AIResult(text=payload["draft"], usage_tokens=0, model_id="gemini")
+        return AIResult(text=payload['draft'], usage_tokens=0, model_id='gemini')
 
     def revise(
         self,
         *,
         base_text: str,
         change_request: str,
-        file_refs: Optional[List[Dict[str, Any]]] = None,
+        file_refs: list[dict[str, Any]] | None = None,
         deterministic: bool = False,
     ) -> AIResult:
         """Return revised text plus structured diff for contract validation.
@@ -65,21 +65,21 @@ class GeminiProvider(BaseProvider):
             file_refs=file_refs or [],
             model_max_tokens=None,
         )
-        formatted = base_text.rstrip() + "\n\n[gemini:polish] " + change_request.strip()
-        det = " deterministic=1" if deterministic else ""
+        formatted = base_text.rstrip() + '\n\n[gemini:polish] ' + change_request.strip()
+        det = ' deterministic=1' if deterministic else ''
         ctx = summarize_file_refs(budget.file_refs)
         revised = formatted + det + ctx
         diff = diff_texts(base_text, revised)
-        payload = {"revised": revised, "diff": diff}
+        payload = {'revised': revised, 'diff': diff}
         validate_reviser_output(payload)
-        return AIResult(text=revised, usage_tokens=0, model_id="gemini")
+        return AIResult(text=revised, usage_tokens=0, model_id='gemini')
 
     def format_final(
         self,
         *,
         full_text: str,
         template_hint: str | None = None,
-        file_refs: Optional[List[Dict[str, Any]]] = None,
+        file_refs: list[dict[str, Any]] | None = None,
         deterministic: bool = False,
     ) -> AIResult:
         budget = apply_context_budget(
@@ -88,9 +88,9 @@ class GeminiProvider(BaseProvider):
             file_refs=file_refs or [],
             model_max_tokens=None,
         )
-        hint = f" template={template_hint}" if template_hint else ""
-        det = " deterministic=1" if deterministic else ""
+        hint = f' template={template_hint}' if template_hint else ''
+        det = ' deterministic=1' if deterministic else ''
         ctx = summarize_file_refs(budget.file_refs)
-        payload = {"formatted_markdown": f"[gemini:final_format{hint}{det}]\n\n{full_text}" + ctx}
+        payload = {'formatted_markdown': f'[gemini:final_format{hint}{det}]\n\n{full_text}' + ctx}
         validate_formatter_output(payload)
-        return AIResult(text=payload["formatted_markdown"], usage_tokens=0, model_id="gemini")
+        return AIResult(text=payload['formatted_markdown'], usage_tokens=0, model_id='gemini')

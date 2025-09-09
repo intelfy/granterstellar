@@ -10,8 +10,9 @@ class Migration(migrations.Migration):
     - No schema changes required; this migration marks the application
       boundary for future migrations relying on structured diff metadata.
     """
+
     dependencies = [
-        ("proposals", "0006_proposalsection_extensions"),
+        ('proposals', '0006_proposalsection_extensions'),
     ]
 
     operations = []

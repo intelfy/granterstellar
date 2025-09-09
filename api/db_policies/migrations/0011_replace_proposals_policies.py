@@ -1,6 +1,6 @@
 from django.db import migrations
 
-SQL = r'''
+SQL = r"""
 -- 0011_replace_proposals_policies
 -- Security Goals:
 -- 1. Remove broad proposals_write policy (FOR ALL) introduced earlier; revert to granular INSERT/UPDATE/DELETE.
@@ -78,7 +78,7 @@ BEGIN
         );
     $pol$;
 END $outer$;
-'''
+"""
 
 
 def forwards(apps, schema_editor):

@@ -1,12 +1,12 @@
 from django.db import migrations
 
 
-SQL = r'''
+SQL = r"""
 -- JSONB GIN index on proposals content for common path queries
 CREATE INDEX IF NOT EXISTS idx_proposals_content_gin ON proposals_proposal USING GIN (content jsonb_path_ops);
 -- GIN index on shared_with array (int[])
 CREATE INDEX IF NOT EXISTS idx_proposals_shared_with_gin ON proposals_proposal USING GIN (shared_with);
-'''
+"""
 
 
 def forwards(apps, schema_editor):

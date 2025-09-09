@@ -31,7 +31,7 @@ class OrgUser(models.Model):
         unique_together = ('org', 'user')
 
     def __str__(self) -> str:  # pragma: no cover
-        return f"{self.user_id}@{self.org_id}:{self.role}"
+        return f'{self.user_id}@{self.org_id}:{self.role}'
 
 
 class OrgInvite(models.Model):
@@ -52,7 +52,7 @@ class OrgInvite(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["org", "email"]),
+            models.Index(fields=['org', 'email']),
         ]
 
     def save(self, *args, **kwargs):  # pragma: no cover - simple token gen
@@ -62,6 +62,7 @@ class OrgInvite(models.Model):
         if self.expires_at is None:
             try:
                 from django.conf import settings as dj_settings
+
                 ttl_days = int(getattr(dj_settings, 'ORG_INVITE_TTL_DAYS', 14) or 0)
             except Exception:
                 ttl_days = 14
@@ -81,6 +82,7 @@ class OrgProposalAllocation(models.Model):
     """Enterprise-only: per-admin per-org monthly proposal allocation preference.
     allocation = 0 means participate proportionally in the unallocated remainder.
     """
+
     admin = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='org_allocations')
     org = models.ForeignKey('orgs.Organization', on_delete=models.CASCADE, related_name='admin_allocations')
     month = models.DateField(default=date.today)
@@ -105,7 +107,7 @@ def _capture_old_admin(sender, instance: Organization, **kwargs):  # pragma: no 
 @receiver(post_save, sender=Organization)
 def _recompute_org_subscription(sender, instance: Organization, created: bool, **kwargs):
     # Only act when admin changed or on create
-    changed = created or getattr(instance, "_old_admin_id", None) != instance.admin_id
+    changed = created or getattr(instance, '_old_admin_id', None) != instance.admin_id
     if not changed:
         return
     try:

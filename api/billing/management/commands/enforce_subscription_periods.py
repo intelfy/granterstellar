@@ -7,7 +7,7 @@ from billing.utils import upsert_org_subscription_from_admin
 
 
 class Command(BaseCommand):
-    help = "Enforce subscription end-of-period cancellations (safety net if webhooks missed)"
+    help = 'Enforce subscription end-of-period cancellations (safety net if webhooks missed)'
 
     def handle(self, *args, **options):
         now = timezone.now()
@@ -15,14 +15,14 @@ class Command(BaseCommand):
             cancel_at_period_end=True,
             current_period_end__isnull=False,
             current_period_end__lte=now,
-            status__in=["active", "trialing", "past_due"],
+            status__in=['active', 'trialing', 'past_due'],
         )
         updated = 0
         for sub in qs.iterator():
-            sub.status = "canceled"
+            sub.status = 'canceled'
             if not sub.canceled_at:
                 sub.canceled_at = now
-            sub.save(update_fields=["status", "canceled_at", "updated_at"])
+            sub.save(update_fields=['status', 'canceled_at', 'updated_at'])
             updated += 1
             # Downgrade cascade: if this is a personal subscription, mirror free/canceled onto admin orgs
             if sub.owner_user_id:
@@ -33,4 +33,4 @@ class Command(BaseCommand):
                 except Exception:
                     # Do not fail the whole enforcement if cascade fails for one org
                     pass
-        self.stdout.write(self.style.SUCCESS(f"Subscriptions enforced: {updated}"))
+        self.stdout.write(self.style.SUCCESS(f'Subscriptions enforced: {updated}'))

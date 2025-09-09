@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ('orgs', '0005_orginvite_expires_at'),
         ('proposals', '0003_require_org_on_proposal'),
@@ -15,6 +14,8 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='proposal',
             name='org',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='proposals', to='orgs.organization'),
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.PROTECT, related_name='proposals', to='orgs.organization'
+            ),
         ),
     ]

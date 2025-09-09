@@ -12,55 +12,55 @@ def _url_to_media_rel(url: str) -> str | None:
     """Convert a MEDIA_URL-based URL to a relative media path (if possible)."""
     if not url:
         return None
-    media_url = settings.MEDIA_URL or "/media/"
+    media_url = settings.MEDIA_URL or '/media/'
     # Normalize to path-only
     path = url
     try:
         parsed = urlparse(url)
         if parsed.scheme and parsed.netloc:
-            path = parsed.path or ""
+            path = parsed.path or ''
     except Exception:
         pass
     if not path:
         return None
     # Strip leading media_url if present
     if path.startswith(media_url):
-        return path[len(media_url) :].lstrip("/")
+        return path[len(media_url) :].lstrip('/')
     # Fallback: accept known prefixes
-    for prefix in ("uploads/", "exports/"):
-        if path.lstrip("/").startswith(prefix):
-            return path.lstrip("/")
+    for prefix in ('uploads/', 'exports/'):
+        if path.lstrip('/').startswith(prefix):
+            return path.lstrip('/')
     return None
 
 
 class Command(BaseCommand):
-    help = "List files under MEDIA_ROOT that are not referenced by FileUpload or ExportJob records."
+    help = 'List files under MEDIA_ROOT that are not referenced by FileUpload or ExportJob records.'
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--prefix",
-            action="append",
-            default=["uploads/", "exports/"],
-            help="Media subpath prefixes to scan (default: uploads/, exports/). Can be provided multiple times.",
+            '--prefix',
+            action='append',
+            default=['uploads/', 'exports/'],
+            help='Media subpath prefixes to scan (default: uploads/, exports/). Can be provided multiple times.',
         )
 
     def handle(self, *args, **options):
-        prefixes = options.get("prefix") or ["uploads/", "exports/"]
+        prefixes = options.get('prefix') or ['uploads/', 'exports/']
         media_root = settings.MEDIA_ROOT
         if not media_root or not os.path.isdir(media_root):
-            self.stdout.write(self.style.WARNING("MEDIA_ROOT not configured or not a directory"))
+            self.stdout.write(self.style.WARNING('MEDIA_ROOT not configured or not a directory'))
             return
 
         # Gather referenced relative paths
         referenced: set[str] = set()
-        for up in FileUpload.objects.only("file").iterator():
+        for up in FileUpload.objects.only('file').iterator():
             try:
-                name = getattr(up.file, "name", "")
+                name = getattr(up.file, 'name', '')
                 if name:
                     referenced.add(name)
             except Exception:
                 continue
-        for job in ExportJob.objects.only("url").iterator():
+        for job in ExportJob.objects.only('url').iterator():
             rel = _url_to_media_rel(job.url)
             if rel:
                 referenced.add(rel)
@@ -75,14 +75,14 @@ class Command(BaseCommand):
                 for fn in filenames:
                     full = os.path.join(dirpath, fn)
                     # Compute relative to media root with forward slashes
-                    rel = os.path.relpath(full, media_root).replace(os.sep, "/")
+                    rel = os.path.relpath(full, media_root).replace(os.sep, '/')
                     scanned.append(rel)
                     if rel not in referenced:
                         orphans.append(rel)
 
-        self.stdout.write(f"Scanned files: {len(scanned)}")
-        self.stdout.write(f"Referenced files: {len(referenced)}")
-        self.stdout.write(self.style.WARNING(f"Orphaned files: {len(orphans)}"))
+        self.stdout.write(f'Scanned files: {len(scanned)}')
+        self.stdout.write(f'Referenced files: {len(referenced)}')
+        self.stdout.write(self.style.WARNING(f'Orphaned files: {len(orphans)}'))
         if orphans:
             for rel in sorted(orphans):
                 self.stdout.write(rel)

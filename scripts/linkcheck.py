@@ -13,6 +13,7 @@ Exclusions:
 - Local dev-only paths starting with /api or /media
 - Mailgun/analytics placeholders if any
 """
+
 from __future__ import annotations
 
 import argparse
@@ -29,20 +30,20 @@ except Exception:
     requests = None  # external checks will be disabled if requests is missing
 
 
-MD_LINK_RE = re.compile(r"!??\[[^\]]*\]\(([^\)\s]+)(?:\s+\"[^\"]*\")?\)")
+MD_LINK_RE = re.compile(r'!??\[[^\]]*\]\(([^\)\s]+)(?:\s+\"[^\"]*\")?\)')
 HTML_HREF_RE = re.compile(r"\b(?:href|src)=['\"]([^'\"]+)['\"]", re.IGNORECASE)
 
 EXTERNAL_EXCLUDE_PATTERNS = (
-    ".example",  # placeholder domains
+    '.example',  # placeholder domains
 )
 
 LOCAL_EXCLUDE_PREFIXES = (
-    "/api",  # served via dev/prod server
-    "/media",  # served by API
-    "mailto:",
-    "tel:",
-    "javascript:",
-    "data:",
+    '/api',  # served via dev/prod server
+    '/media',  # served by API
+    'mailto:',
+    'tel:',
+    'javascript:',
+    'data:',
 )
 
 
@@ -59,21 +60,21 @@ def iter_repo_files(root: str) -> Iterable[str]:
         # skip virtual envs and media/output
         parts = dirpath.split(os.sep)
         if (
-            ".venv" in parts
-            or "node_modules" in parts
-            or "media" in parts
-            or ".git" in parts
-            or "dist" in parts  # skip built frontend artifacts (minified HTML -> false link positives)
+            '.venv' in parts
+            or 'node_modules' in parts
+            or 'media' in parts
+            or '.git' in parts
+            or 'dist' in parts  # skip built frontend artifacts (minified HTML -> false link positives)
         ):
             continue
         for f in filenames:
-            if f.endswith((".md", ".html")):
+            if f.endswith(('.md', '.html')):
                 yield os.path.join(dirpath, f)
 
 
 def extract_links(path: str) -> list[str]:
     try:
-        with open(path, encoding="utf-8", errors="ignore") as fh:
+        with open(path, encoding='utf-8', errors='ignore') as fh:
             text = fh.read()
     except Exception:
         return []
@@ -84,15 +85,15 @@ def extract_links(path: str) -> list[str]:
 
 
 def is_external(url: str) -> bool:
-    return url.startswith("http://") or url.startswith("https://")
+    return url.startswith('http://') or url.startswith('https://')
 
 
 def should_skip(url: str, external: bool) -> bool:
     # anchors only
-    if url.startswith("#"):
+    if url.startswith('#'):
         return True
     # query only (unlikely)
-    if url.strip() == "":
+    if url.strip() == '':
         return True
     if external:
         for pat in EXTERNAL_EXCLUDE_PATTERNS:
@@ -107,43 +108,43 @@ def should_skip(url: str, external: bool) -> bool:
 
 def check_local(path: str, link: str) -> tuple[bool, str]:
     # strip anchors
-    target, *_ = link.split("#", 1)
+    target, *_ = link.split('#', 1)
     # ignore root-absolute paths like /api/* or /media/* handled by skip
-    if target.startswith("/"):
-        return True, "skipped (root-absolute)"
+    if target.startswith('/'):
+        return True, 'skipped (root-absolute)'
     # resolve
     base = os.path.dirname(path)
     full = os.path.normpath(os.path.join(base, target))
     if os.path.exists(full):
-        return True, "ok"
-    return False, f"missing file: {full}"
+        return True, 'ok'
+    return False, f'missing file: {full}'
 
 
 def check_external(url: str, timeout: float = 6.0) -> tuple[bool, str]:
     if requests is None:
-        return True, "skipped (requests not installed)"
+        return True, 'skipped (requests not installed)'
     try:
         # Prefer HEAD; fallback to GET on 405/403
         r = requests.head(url, timeout=timeout, allow_redirects=True)
         if r.status_code >= 200 and r.status_code < 400:
-            return True, f"{r.status_code}"
+            return True, f'{r.status_code}'
         if r.status_code in (403, 405):
             r = requests.get(url, timeout=timeout, allow_redirects=True)
             if r.status_code >= 200 and r.status_code < 400:
-                return True, f"{r.status_code}"
-        return False, f"HTTP {r.status_code}"
+                return True, f'{r.status_code}'
+        return False, f'HTTP {r.status_code}'
     except requests.exceptions.SSLError as e:
-        return False, f"SSL error: {e.__class__.__name__}"
+        return False, f'SSL error: {e.__class__.__name__}'
     except requests.exceptions.RequestException as e:
-        return False, f"{e.__class__.__name__}"
+        return False, f'{e.__class__.__name__}'
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--no-external", action="store_true", help="skip external http(s) checks")
+    ap.add_argument('--no-external', action='store_true', help='skip external http(s) checks')
     args = ap.parse_args()
 
-    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     findings: list[Finding] = []
     files_scanned = 0
     links_checked = 0
@@ -158,28 +159,28 @@ def main() -> int:
                 ok, info = check_external(link)
                 links_checked += 1
                 if not ok:
-                    findings.append(Finding(path, link, "external", info))
+                    findings.append(Finding(path, link, 'external', info))
             else:
                 if should_skip(link, external=False):
                     continue
                 ok, info = check_local(path, link)
                 links_checked += 1
                 if not ok:
-                    findings.append(Finding(path, link, "local", info))
+                    findings.append(Finding(path, link, 'local', info))
 
     dt = time.time() - t0
     if findings:
         print(
-            f"Link check: FAIL — {len(findings)} issues across {files_scanned} files, "
-            f"{links_checked} links checked in {dt:.1f}s"
+            f'Link check: FAIL — {len(findings)} issues across {files_scanned} files, '
+            f'{links_checked} links checked in {dt:.1f}s'
         )
         for f in findings:
-            print(f"- [{f.kind}] {f.file}: {f.link} — {f.error}")
+            print(f'- [{f.kind}] {f.file}: {f.link} — {f.error}')
         return 1
     else:
-        print(f"Link check: PASS — {files_scanned} files, {links_checked} links checked in {dt:.1f}s")
+        print(f'Link check: PASS — {files_scanned} files, {links_checked} links checked in {dt:.1f}s')
         return 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())

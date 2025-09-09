@@ -21,17 +21,20 @@ Future:
   - Handle planner-driven removal (archive or flag stale sections).
   - Enforce immutable key set post user edits (if needed).
 """
+
 from __future__ import annotations
 from typing import Iterable, Any
 from django.db import transaction
 from proposals.models import ProposalSection
 
+
 def _normalize_key(raw: str) -> str:
     import re
-    raw = (raw or "").strip().lower()
+
+    raw = (raw or '').strip().lower()
     # replace spaces with dashes, strip invalid chars
-    raw = raw.replace(" ", "-")
-    return re.sub(r"[^a-z0-9_-]", "", raw)[:128]
+    raw = raw.replace(' ', '-')
+    return re.sub(r'[^a-z0-9_-]', '', raw)[:128]
 
 
 @transaction.atomic
@@ -42,17 +45,17 @@ def materialize_sections(*, proposal_id: int, blueprint: Iterable[dict[str, Any]
     for idx, item in enumerate(blueprint or []):
         if not isinstance(item, dict):
             continue
-        key = _normalize_key(str(item.get("key", "")))
+        key = _normalize_key(str(item.get('key', '')))
         if not key or key in seen_keys:
             continue  # skip empties / duplicates
         seen_keys.add(key)
-        order_val = item.get("order")
+        order_val = item.get('order')
         try:
             order_int = int(order_val) if order_val is not None else idx
         except (TypeError, ValueError):  # pragma: no cover - defensive
             order_int = idx
-        draft_seed = item.get("draft")
-        title_val = (item.get("title") or "").strip()[:256]
+        draft_seed = item.get('draft')
+        title_val = (item.get('title') or '').strip()[:256]
         created = False
         section = ProposalSection.objects.filter(proposal_id=proposal_id, key=key).first()
         if section is None:
@@ -61,21 +64,22 @@ def materialize_sections(*, proposal_id: int, blueprint: Iterable[dict[str, Any]
                 key=key,
                 title=title_val,
                 order=order_int,
-                draft_content=(draft_seed or "")[:20000],
+                draft_content=(draft_seed or '')[:20000],
             )
             created = True
         else:
             updates = {}
             if title_val and section.title != title_val:
-                updates["title"] = title_val
+                updates['title'] = title_val
             if section.order != order_int:
-                updates["order"] = order_int
+                updates['order'] = order_int
             if updates:
                 for k, v in updates.items():
                     setattr(section, k, v)
-                section.save(update_fields=list(updates.keys()) + ["updated_at"])
+                section.save(update_fields=list(updates.keys()) + ['updated_at'])
         out.append((section, created))
         fallback_ord = max(fallback_ord, order_int + 1)
     return out
 
-__all__ = ["materialize_sections"]
+
+__all__ = ['materialize_sections']

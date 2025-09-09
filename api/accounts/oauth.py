@@ -104,7 +104,7 @@ def _verify_google_id_token_prod(id_token: str) -> dict:
         claims = pyjwt.decode(
             id_token,
             signing_key.key,
-            algorithms=["RS256"],
+            algorithms=['RS256'],
             audience=audience,
             issuer=issuer,
             options={
@@ -187,11 +187,7 @@ def google_callback(request):
             return JsonResponse({'ok': False, 'error': 'missing email', 'code': 'missing_email'}, status=400)
         user, _ = _get_or_create_user_by_email(email)
         # Ensure a Free subscription exists for this user (debug Google login)
-        sub = (
-            Subscription.objects.filter(owner_user=user)
-            .order_by('-updated_at', '-id')
-            .first()
-        )
+        sub = Subscription.objects.filter(owner_user=user).order_by('-updated_at', '-id').first()
         if not sub:
             sub = Subscription(owner_user=user)
         sub.tier = 'free'
@@ -205,12 +201,9 @@ def google_callback(request):
                 if (
                     not inv.revoked_at
                     and not inv.accepted_at
-                    and (email or '').strip().lower()
-                    == (inv.email or '').strip().lower()
+                    and (email or '').strip().lower() == (inv.email or '').strip().lower()
                 ):
-                    OrgUser.objects.update_or_create(
-                        org=inv.org, user=user, defaults={'role': inv.role}
-                    )
+                    OrgUser.objects.update_or_create(org=inv.org, user=user, defaults={'role': inv.role})
                     inv.accepted_at = timezone.now()
                     inv.save(update_fields=['accepted_at'])
             except OrgInvite.DoesNotExist:
@@ -225,13 +218,15 @@ def google_callback(request):
     if not client_id or not client_secret or not redirect_uri:
         return JsonResponse({'ok': False, 'error': 'oauth not configured', 'code': 'oauth_not_configured'}, status=400)
 
-    data = urllib.parse.urlencode({
-        'code': code,
-        'client_id': client_id,
-        'client_secret': client_secret,
-        'redirect_uri': redirect_uri,
-        'grant_type': 'authorization_code',
-    }).encode('utf-8')
+    data = urllib.parse.urlencode(
+        {
+            'code': code,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code',
+        }
+    ).encode('utf-8')
     try:
         # Strictly fixed token endpoint to avoid SSRF
         req = urllib.request.Request('https://oauth2.googleapis.com/token', data=data, method='POST')
@@ -255,10 +250,13 @@ def google_callback(request):
     else:
         # In DEBUG, keep local-friendly behavior: decode without signature verification
         try:
-            claims = pyjwt.decode(id_token, options={
-                'verify_signature': False,
-                'verify_aud': False,
-            })
+            claims = pyjwt.decode(
+                id_token,
+                options={
+                    'verify_signature': False,
+                    'verify_aud': False,
+                },
+            )
         except Exception:
             return JsonResponse({'ok': False, 'error': 'invalid id_token', 'code': 'invalid_id_token'}, status=400)
 
@@ -268,11 +266,7 @@ def google_callback(request):
     user, _ = _get_or_create_user_by_email(email)
     # In DEBUG, mark Google logins as Free tier (owner_user scope) for testing
     if settings.DEBUG:
-        sub = (
-            Subscription.objects.filter(owner_user=user)
-            .order_by('-updated_at', '-id')
-            .first()
-        )
+        sub = Subscription.objects.filter(owner_user=user).order_by('-updated_at', '-id').first()
         if not sub:
             sub = Subscription(owner_user=user)
         sub.tier = 'free'
@@ -283,15 +277,8 @@ def google_callback(request):
     if invite_token:
         try:
             inv = OrgInvite.objects.select_related('org').get(token=invite_token)
-            if (
-                not inv.revoked_at
-                and not inv.accepted_at
-                and (email or '').strip().lower()
-                == (inv.email or '').strip().lower()
-            ):
-                OrgUser.objects.update_or_create(
-                    org=inv.org, user=user, defaults={'role': inv.role}
-                )
+            if not inv.revoked_at and not inv.accepted_at and (email or '').strip().lower() == (inv.email or '').strip().lower():
+                OrgUser.objects.update_or_create(org=inv.org, user=user, defaults={'role': inv.role})
                 inv.accepted_at = timezone.now()
                 inv.save(update_fields=['accepted_at'])
         except OrgInvite.DoesNotExist:
@@ -301,6 +288,7 @@ def google_callback(request):
 
 
 # --- GitHub OAuth ---
+
 
 @require_GET
 def github_start(request):
@@ -361,11 +349,9 @@ def github_callback(request):
         if not email:
             return JsonResponse({'ok': False, 'error': 'missing email', 'code': 'missing_email'}, status=400)
         user, _ = _get_or_create_user_by_email(email)
-        sub = (
-            Subscription.objects.filter(owner_user=user)
-            .order_by('-updated_at', '-id')
-            .first()
-        ) or Subscription(owner_user=user)
+        sub = (Subscription.objects.filter(owner_user=user).order_by('-updated_at', '-id').first()) or Subscription(
+            owner_user=user
+        )
         sub.tier = 'free'
         sub.status = 'active'
         sub.cancel_at_period_end = False
@@ -376,12 +362,9 @@ def github_callback(request):
                 if (
                     not inv.revoked_at
                     and not inv.accepted_at
-                    and (email or '').strip().lower()
-                    == (inv.email or '').strip().lower()
+                    and (email or '').strip().lower() == (inv.email or '').strip().lower()
                 ):
-                    OrgUser.objects.update_or_create(
-                        org=inv.org, user=user, defaults={'role': inv.role}
-                    )
+                    OrgUser.objects.update_or_create(org=inv.org, user=user, defaults={'role': inv.role})
                     inv.accepted_at = timezone.now()
                     inv.save(update_fields=['accepted_at'])
             except OrgInvite.DoesNotExist:
@@ -396,12 +379,14 @@ def github_callback(request):
         return JsonResponse({'ok': False, 'error': 'oauth not configured', 'code': 'oauth_not_configured'}, status=400)
 
     # Exchange code for access_token
-    data = urllib.parse.urlencode({
-        'client_id': client_id,
-        'client_secret': client_secret,
-        'code': code,
-        'redirect_uri': redirect_uri,
-    }).encode('utf-8')
+    data = urllib.parse.urlencode(
+        {
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'code': code,
+            'redirect_uri': redirect_uri,
+        }
+    ).encode('utf-8')
     try:
         # Fixed origin to GitHub token endpoint
         req = urllib.request.Request('https://github.com/login/oauth/access_token', data=data, method='POST')
@@ -446,11 +431,7 @@ def github_callback(request):
 
     user, _ = _get_or_create_user_by_email(email)
     if settings.DEBUG:
-        sub = (
-            Subscription.objects.filter(owner_user=user)
-            .order_by('-updated_at', '-id')
-            .first()
-        )
+        sub = Subscription.objects.filter(owner_user=user).order_by('-updated_at', '-id').first()
         if not sub:
             sub = Subscription(owner_user=user)
         sub.tier = 'free'
@@ -461,15 +442,8 @@ def github_callback(request):
     if invite_token:
         try:
             inv = OrgInvite.objects.select_related('org').get(token=invite_token)
-            if (
-                not inv.revoked_at
-                and not inv.accepted_at
-                and (email or '').strip().lower()
-                == (inv.email or '').strip().lower()
-            ):
-                OrgUser.objects.update_or_create(
-                    org=inv.org, user=user, defaults={'role': inv.role}
-                )
+            if not inv.revoked_at and not inv.accepted_at and (email or '').strip().lower() == (inv.email or '').strip().lower():
+                OrgUser.objects.update_or_create(org=inv.org, user=user, defaults={'role': inv.role})
                 inv.accepted_at = timezone.now()
                 inv.save(update_fields=['accepted_at'])
         except OrgInvite.DoesNotExist:
@@ -480,6 +454,7 @@ def github_callback(request):
 
 
 # --- Facebook OAuth ---
+
 
 @require_GET
 def facebook_start(request):
@@ -541,11 +516,9 @@ def facebook_callback(request):
         if not email:
             return JsonResponse({'ok': False, 'error': 'missing email', 'code': 'missing_email'}, status=400)
         user, _ = _get_or_create_user_by_email(email)
-        sub = (
-            Subscription.objects.filter(owner_user=user)
-            .order_by('-updated_at', '-id')
-            .first()
-        ) or Subscription(owner_user=user)
+        sub = (Subscription.objects.filter(owner_user=user).order_by('-updated_at', '-id').first()) or Subscription(
+            owner_user=user
+        )
         sub.tier = 'free'
         sub.status = 'active'
         sub.cancel_at_period_end = False
@@ -556,12 +529,9 @@ def facebook_callback(request):
                 if (
                     not inv.revoked_at
                     and not inv.accepted_at
-                    and (email or '').strip().lower()
-                    == (inv.email or '').strip().lower()
+                    and (email or '').strip().lower() == (inv.email or '').strip().lower()
                 ):
-                    OrgUser.objects.update_or_create(
-                        org=inv.org, user=user, defaults={'role': inv.role}
-                    )
+                    OrgUser.objects.update_or_create(org=inv.org, user=user, defaults={'role': inv.role})
                     inv.accepted_at = timezone.now()
                     inv.save(update_fields=['accepted_at'])
             except OrgInvite.DoesNotExist:
@@ -577,12 +547,14 @@ def facebook_callback(request):
         return JsonResponse({'ok': False, 'error': 'oauth not configured', 'code': 'oauth_not_configured'}, status=400)
 
     # Exchange code for access token
-    token_qs = urllib.parse.urlencode({
-        'client_id': app_id,
-        'client_secret': app_secret,
-        'redirect_uri': redirect_uri,
-        'code': code,
-    })
+    token_qs = urllib.parse.urlencode(
+        {
+            'client_id': app_id,
+            'client_secret': app_secret,
+            'redirect_uri': redirect_uri,
+            'code': code,
+        }
+    )
     # Use Request with fixed host to avoid SSRF scanners complaining
     token_url = f'https://graph.facebook.com/{api_version}/oauth/access_token?{token_qs}'
     try:
@@ -600,8 +572,7 @@ def facebook_callback(request):
     # Fetch user email via Graph API
     # Fixed origin for Facebook Graph API; assemble URL safely
     me_url = (
-        f'https://graph.facebook.com/{api_version}/me?fields=id,name,email&access_token='
-        f'{urllib.parse.quote(access_token)}'
+        f'https://graph.facebook.com/{api_version}/me?fields=id,name,email&access_token=' f'{urllib.parse.quote(access_token)}'
     )
     try:
         mreq = urllib.request.Request(me_url, method='GET')
@@ -616,11 +587,7 @@ def facebook_callback(request):
 
     user, _ = _get_or_create_user_by_email(email)
     if settings.DEBUG:
-        sub = (
-            Subscription.objects.filter(owner_user=user)
-            .order_by('-updated_at', '-id')
-            .first()
-        )
+        sub = Subscription.objects.filter(owner_user=user).order_by('-updated_at', '-id').first()
         if not sub:
             sub = Subscription(owner_user=user)
         sub.tier = 'free'
@@ -631,15 +598,8 @@ def facebook_callback(request):
     if invite_token:
         try:
             inv = OrgInvite.objects.select_related('org').get(token=invite_token)
-            if (
-                not inv.revoked_at
-                and not inv.accepted_at
-                and (email or '').strip().lower()
-                == (inv.email or '').strip().lower()
-            ):
-                OrgUser.objects.update_or_create(
-                    org=inv.org, user=user, defaults={'role': inv.role}
-                )
+            if not inv.revoked_at and not inv.accepted_at and (email or '').strip().lower() == (inv.email or '').strip().lower():
+                OrgUser.objects.update_or_create(org=inv.org, user=user, defaults={'role': inv.role})
                 inv.accepted_at = timezone.now()
                 inv.save(update_fields=['accepted_at'])
         except OrgInvite.DoesNotExist:

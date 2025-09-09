@@ -3,6 +3,7 @@
 NOTE: Lightweight implementation – HTML cleaning is simplistic; replace with
 readability/boilerplate removal in future iteration.
 """
+
 from __future__ import annotations
 
 import re
@@ -18,12 +19,12 @@ from .retrieval import _cosine  # reuse cosine similarity
 
 def _clean_html(html: str) -> str:
     # Remove scripts/styles
-    html = re.sub(r"<script.*?</script>", " ", html, flags=re.DOTALL | re.IGNORECASE)
-    html = re.sub(r"<style.*?</style>", " ", html, flags=re.DOTALL | re.IGNORECASE)
+    html = re.sub(r'<script.*?</script>', ' ', html, flags=re.DOTALL | re.IGNORECASE)
+    html = re.sub(r'<style.*?</style>', ' ', html, flags=re.DOTALL | re.IGNORECASE)
     # Strip tags
-    text = re.sub(r"<[^>]+>", " ", html)
+    text = re.sub(r'<[^>]+>', ' ', html)
     # Collapse whitespace
-    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r'\s+', ' ', text).strip()
     return text
 
 
@@ -31,18 +32,18 @@ def _chunk_text(text: str, *, max_chars: int = 800) -> list[str]:
     parts: list[str] = []
     buf: list[str] = []
     current = 0
-    for para in re.split(r"\n+|(?<=\.)\s{2,}", text):
+    for para in re.split(r'\n+|(?<=\.)\s{2,}', text):
         p = para.strip()
         if not p:
             continue
         if current + len(p) > max_chars and buf:
-            parts.append(" ".join(buf))
+            parts.append(' '.join(buf))
             buf = []
             current = 0
         buf.append(p)
         current += len(p) + 1
     if buf:
-        parts.append(" ".join(buf))
+        parts.append(' '.join(buf))
     return parts[:200]  # safety cap
 
 
@@ -52,7 +53,7 @@ def _token_len(s: str) -> int:
 
 
 def _dedup_key(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()[:32]
 
 
 @transaction.atomic
@@ -80,14 +81,15 @@ def create_resource_with_chunks(
     # Adjust threshold for deterministic hash backend (coarse). Hash vectors can
     # yield lower cosine for small textual variants; widen window slightly.
     from .embedding_service import EmbeddingService  # local import to avoid cycle in apps
-    if EmbeddingService.instance().backend == "hash" and similarity_threshold >= 0.95:
+
+    if EmbeddingService.instance().backend == 'hash' and similarity_threshold >= 0.95:
         adj_threshold = 0.90
     else:
         adj_threshold = similarity_threshold
     if adj_threshold < 1.0:  # allow disabling by passing 1.0
         # Iterate limited candidate set (same type, last 200 for recency bias)
-        candidate_qs = AIResource.objects.filter(type=type_).order_by("-id")[:200]
-        candidate_ids = list(candidate_qs.values_list("id", flat=True))
+        candidate_qs = AIResource.objects.filter(type=type_).order_by('-id')[:200]
+        candidate_ids = list(candidate_qs.values_list('id', flat=True))
         if candidate_ids:
             chunk_map: dict[int, AIChunk] = {}
             for c in AIChunk.objects.filter(resource_id__in=candidate_ids, ord=0):  # type: ignore[attr-defined]
@@ -98,18 +100,18 @@ def create_resource_with_chunks(
                 if not ch0:
                     continue
                 # Fast textual near-duplicate heuristic (prefix delta <32 chars)
-                t_existing = (ch0.text or "")
+                t_existing = ch0.text or ''
                 s1, s2 = t_existing.strip(), first_chunk.strip()
                 shorter, longer = (s1, s2) if len(s1) <= len(s2) else (s2, s1)
                 if shorter and longer.startswith(shorter) and (len(longer) - len(shorter) < 32):
-                    existing_sim = next((r for r in candidate_qs if getattr(r, "id", None) == cand_id), None)
+                    existing_sim = next((r for r in candidate_qs if getattr(r, 'id', None) == cand_id), None)
                     if existing_sim:
                         return existing_sim
                 if not ch0.embedding:  # defensive
                     continue
                 sim = _cosine(first_vec, ch0.embedding)
                 if sim >= adj_threshold:
-                    existing_sim = next((r for r in candidate_qs if getattr(r, "id", None) == cand_id), None)
+                    existing_sim = next((r for r in candidate_qs if getattr(r, 'id', None) == cand_id), None)
                     if existing_sim:
                         return existing_sim
     resource = AIResource.objects.create(
@@ -117,7 +119,7 @@ def create_resource_with_chunks(
         title=title[:256],
         source_url=source_url,
         sha256=sha256,
-        metadata={"dedup": True},
+        metadata={'dedup': True},
     )
     chunks = prospective_chunks  # reuse already chunked result
     embeddings = embed_texts(chunks)
@@ -135,7 +137,7 @@ def create_resource_with_chunks(
         created += 1
     # Attach simple ingestion stats
     if created:
-        AIResource.objects.filter(pk=resource.pk).update(metadata={"chunks": created})
+        AIResource.objects.filter(pk=resource.pk).update(metadata={'chunks': created})
     return resource
 
 
@@ -144,8 +146,8 @@ def ingest_grant_call(url: str) -> AIResource:
     resp.raise_for_status()
     cleaned = _clean_html(resp.text)
     return create_resource_with_chunks(
-        type_="call_snapshot",
-        title="Grant Call",
+        type_='call_snapshot',
+        title='Grant Call',
         source_url=url,
         full_text=cleaned,
     )
@@ -153,14 +155,14 @@ def ingest_grant_call(url: str) -> AIResource:
 
 def ingest_manifest(yaml_text: str) -> list[AIResource]:
     data = yaml.safe_load(yaml_text) or {}
-    items = data.get("items", [])
+    items = data.get('items', [])
     created: list[AIResource] = []
     for it in items:
         try:
-            type_ = it.get("type")
-            title = it.get("title", type_)
-            text = it.get("text")
-            url = it.get("source_url", "")
+            type_ = it.get('type')
+            title = it.get('title', type_)
+            text = it.get('text')
+            url = it.get('source_url', '')
             if not type_ or not text:
                 continue
             res = create_resource_with_chunks(type_=type_, title=title, source_url=url, full_text=text)

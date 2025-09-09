@@ -17,11 +17,11 @@ from billing.quota import can_unarchive
 
 
 class ProposalViewSet(viewsets.ModelViewSet):
-    queryset = Proposal.objects.all().order_by("-created_at")
+    queryset = Proposal.objects.all().order_by('-created_at')
     serializer_class = ProposalSerializer
 
     def get_permissions(self):
-        if self.action == "create":
+        if self.action == 'create':
             return [permissions.IsAuthenticated(), CanCreateProposal()]
         # Read allowed for authenticated users for now; tighten as auth lands
         return [permissions.IsAuthenticated()] if not settings.DEBUG else [permissions.AllowAny()]
@@ -38,13 +38,13 @@ class ProposalViewSet(viewsets.ModelViewSet):
         """
         qs = super().get_queryset()
         user = self.request.user
-        if not getattr(user, "is_authenticated", False):
+        if not getattr(user, 'is_authenticated', False):
             return qs.none()
         # Aggregate org ids where user is admin or member
-        admin_org_ids = Organization.objects.filter(admin=user).values_list("id", flat=True)
-        member_org_ids = OrgUser.objects.filter(user_id=user.id).values_list("org_id", flat=True)
+        admin_org_ids = Organization.objects.filter(admin=user).values_list('id', flat=True)
+        member_org_ids = OrgUser.objects.filter(user_id=user.id).values_list('org_id', flat=True)
         allowed_org_ids = set(admin_org_ids) | set(member_org_ids)
-        org_id_header = self.request.headers.get("X-Org-ID")
+        org_id_header = self.request.headers.get('X-Org-ID')
         if org_id_header and org_id_header.isdigit():
             oid = int(org_id_header)
             if oid in allowed_org_ids:
@@ -63,7 +63,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
         """
         user = self.request.user
         org: Optional[Organization] = None
-        org_id = self.request.headers.get("X-Org-ID")
+        org_id = self.request.headers.get('X-Org-ID')
         if org_id and org_id.isdigit():
             candidate = Organization.objects.filter(id=int(org_id)).first()
             # Use getattr to avoid static type checker complaints; admin_id always present at runtime.
@@ -77,51 +77,54 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 org = candidate
         if org is None:
             # Personal org provisioning path
-            org = Organization.objects.filter(admin=user).order_by("id").first()
+            org = Organization.objects.filter(admin=user).order_by('id').first()
             if org is None:
-                org = Organization.objects.create(name=f"{user.username}-personal", admin=user)
+                org = Organization.objects.create(name=f'{user.username}-personal', admin=user)
             # Ensure membership record (idempotent)
-            OrgUser.objects.get_or_create(org=org, user=user, defaults={"role": "admin"})
+            OrgUser.objects.get_or_create(org=org, user=user, defaults={'role': 'admin'})
         serializer.save(author=user, org=org)
 
     def partial_update(self, request: Request, *args, **kwargs):
         instance: Proposal = self.get_object()
         # Determine org scope from header
         org: Optional[Organization] = None
-        org_id = request.headers.get("X-Org-ID")
+        org_id = request.headers.get('X-Org-ID')
         if org_id and org_id.isdigit():
             org = Organization.objects.filter(id=int(org_id)).first()
         # Ensure membership before allowing state changes in org scope
         if org is not None:
             is_member = OrgUser.objects.filter(org=org, user_id=request.user.id).exists()
             if not is_member:
-                return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        requested_state = serializer.validated_data.get("state")
+        requested_state = serializer.validated_data.get('state')
 
         if requested_state is not None:
             # Archiving allowed for all tiers (privacy); does not change usage cap status
-            if requested_state == "archived" and instance.state != "archived":
+            if requested_state == 'archived' and instance.state != 'archived':
                 # set archived_at on transition to archived
                 instance.archived_at = timezone.now()
             # Un-archiving should respect active caps only
-            elif instance.state == "archived" and requested_state != "archived":
+            elif instance.state == 'archived' and requested_state != 'archived':
                 allowed, details = can_unarchive(request.user, org, instance)
                 if not allowed:
-                    resp = Response({
-                        "error": "quota_exceeded",
-                        "reason": details.get("reason"),
-                        "tier": details.get("tier"),
-                        "limits": details.get("limits"),
-                        "usage": details.get("usage"),
-                    }, status=402)
-                    resp["X-Quota-Reason"] = details.get("reason", "quota")
+                    resp = Response(
+                        {
+                            'error': 'quota_exceeded',
+                            'reason': details.get('reason'),
+                            'tier': details.get('tier'),
+                            'limits': details.get('limits'),
+                            'usage': details.get('usage'),
+                        },
+                        status=402,
+                    )
+                    resp['X-Quota-Reason'] = details.get('reason', 'quota')
                     return resp
 
         # Clear archived_at if leaving archived state
-        if instance.state == "archived" and requested_state and requested_state != "archived":
+        if instance.state == 'archived' and requested_state and requested_state != 'archived':
             instance.archived_at = None
         self.perform_update(serializer)
         return Response(serializer.data)
@@ -130,23 +133,23 @@ class ProposalViewSet(viewsets.ModelViewSet):
         instance: Proposal = self.get_object()
         # For org-scoped delete (archive), ensure membership
         org: Optional[Organization] = None
-        org_id = request.headers.get("X-Org-ID")
+        org_id = request.headers.get('X-Org-ID')
         if org_id and org_id.isdigit():
             org = Organization.objects.filter(id=int(org_id)).first()
         if org is not None:
             is_member = OrgUser.objects.filter(org=org, user_id=request.user.id).exists()
             if not is_member:
-                return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
         # Already archived → 204 idempotent
-        if instance.state == "archived":
+        if instance.state == 'archived':
             return Response(status=status.HTTP_204_NO_CONTENT)
 
         # Allow archive for all tiers (privacy)
-        instance.state = "archived"
+        instance.state = 'archived'
         instance.archived_at = timezone.now()
-        update_fields = ["state", "archived_at"]
-        if hasattr(instance, "updated_at"):
-            update_fields.append("updated_at")
+        update_fields = ['state', 'archived_at']
+        if hasattr(instance, 'updated_at'):
+            update_fields.append('updated_at')
         instance.save(update_fields=update_fields)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -157,7 +160,7 @@ class SectionPromotionView(APIView):
     def post(self, request: Request, section_id: str):  # promote
         section = get_section(section_id)
         if not section:
-            return Response({"error": "not_found"}, status=404)
+            return Response({'error': 'not_found'}, status=404)
         # Simple ownership/membership enforcement mirroring Proposal scoping
         user = request.user
         proposal = section.proposal
@@ -165,18 +168,18 @@ class SectionPromotionView(APIView):
         if org_id_val:
             is_member = OrgUser.objects.filter(org_id=org_id_val, user_id=user.id).exists()
             if not is_member:
-                return Response({"error": "forbidden"}, status=403)
+                return Response({'error': 'forbidden'}, status=403)
         else:
             if getattr(proposal, 'author_id', None) != user.id:
-                return Response({"error": "forbidden"}, status=403)
+                return Response({'error': 'forbidden'}, status=403)
         if section.locked:
-            return Response({"error": "already_locked"}, status=409)
+            return Response({'error': 'already_locked'}, status=409)
         promote_section(section)
         # Record promotion metric (lightweight observability of lifecycle transitions)
         try:  # best-effort; failures shouldn't block response
             AIMetric.objects.create(  # type: ignore[arg-type]
-                type="promote",
-                model_id="lifecycle",
+                type='promote',
+                model_id='lifecycle',
                 proposal_id=getattr(section.proposal, 'id', None),
                 section_id=str(getattr(section, 'id', '')),
                 duration_ms=0,
@@ -187,7 +190,7 @@ class SectionPromotionView(APIView):
             )
         except Exception:  # pragma: no cover - defensive
             pass
-        return Response({"status": "promoted", "section_id": section_id})
+        return Response({'status': 'promoted', 'section_id': section_id})
 
     def delete(self, request: Request, section_id: str):  # unlock
         section = get_section(section_id)
@@ -199,10 +202,10 @@ class SectionPromotionView(APIView):
         if org_id_val:
             is_member = OrgUser.objects.filter(org_id=org_id_val, user_id=user.id).exists()
             if not is_member:
-                return Response({"error": "forbidden"}, status=403)
+                return Response({'error': 'forbidden'}, status=403)
         else:
             if getattr(proposal, 'author_id', None) != user.id:
-                return Response({"error": "forbidden"}, status=403)
+                return Response({'error': 'forbidden'}, status=403)
         section.locked = False
-        section.save(update_fields=["locked", "updated_at"])
-        return Response({"status": "unlocked", "section_id": section_id})
+        section.save(update_fields=['locked', 'updated_at'])
+        return Response({'status': 'unlocked', 'section_id': section_id})

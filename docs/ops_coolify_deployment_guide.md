@@ -42,7 +42,7 @@ Key concepts (keep these defaults)
 - Router base: VITE_ROUTER_BASE = /app
 - App hosts: APP_HOSTS = comma‑separated hostnames that should redirect / → /app
 - Invite acceptance: SPA surfaces a global invite banner when an invite token is in the URL (selectors in `docs/frontend_design_bible.md`).
- - Distinct JWT signing key: set `JWT_SIGNING_KEY` different from `SECRET_KEY` (enforced by forthcoming doctor script) to allow rotation without invalidating Django internals.
+- Distinct JWT signing key: set `JWT_SIGNING_KEY` different from `SECRET_KEY` (now enforced) to allow rotation without invalidating Django internals.
 
 ## 🔑 Environment Variable Matrix (Authoritative Reference)
 
@@ -78,7 +78,7 @@ Each variable below lists: Type = secret | config | toggle | security | pricing 
 | CELERY_TASK_ALWAYS_EAGER | Run tasks inline (testing) | toggle |  | 0 | Overrides async behavior for test/local runs. |
 | JWT_ACCESS_MINUTES | Access token lifetime | security |  | 30 | Shorten for higher security; impacts client refresh cadence. |
 | JWT_REFRESH_DAYS | Refresh token lifetime | security |  | 7 | Longer rotation window. |
-| JWT_SIGNING_KEY | JWT signature secret | secret | C | SECRET_KEY | Strongly recommended distinct from SECRET_KEY; required for key rotation strategy. |
+| JWT_SIGNING_KEY | JWT signature secret | secret | R | (none) | Must be distinct from SECRET_KEY (enforced); enables rotation without invalidating Django internals. |
 | DRF_THROTTLE_USER | User rate throttle | security |  | 100/min | DRF format `<n>/<period>`. |
 | DRF_THROTTLE_ANON | Anonymous throttle | security |  | 20/min | Tune for abuse mitigation. |
 | DRF_THROTTLE_LOGIN | Login endpoint throttle | security |  | 10/min | Scoped throttle (brute force protection). |
@@ -423,7 +423,7 @@ Host, routing, and origins
       - CORS_ALLOWED_ORIGINS / CSRF_TRUSTED_ORIGINS: Browser cross‑origin rules. List full origins (scheme + host, e.g., <https://app.example.com>) that can call the API/send cookies.
 - VITE_BASE_URL / VITE_ROUTER_BASE: How the SPA is served and routed. Keep defaults unless you have a custom CDN.
 
- 
+
 Content Security Policy (CSP) allow‑lists
 
 - Defaults: The app ships a strict CSP that only allows same‑origin resources. These envs extend, not replace, the defaults.
@@ -503,7 +503,7 @@ Landing server HTTPS and throttling (when running standalone)
 Providers setup (copy‑paste friendly)
 
 Stripe
- 
+
 1) Dashboard → Developers → API keys → set STRIPE_SECRET_KEY.
 
 2) Developers → Webhooks → Add endpoint: <https://app.example.com/api/stripe/webhook>; copy Signing secret → STRIPE_WEBHOOK_SECRET.
@@ -515,22 +515,22 @@ Stripe
 5) Grace window: FAILED_PAYMENT_GRACE_DAYS controls Pro access during past_due.
 
 Google OAuth
- 
+
 1) Google Cloud → OAuth client: web app. Authorized redirect URI: <https://app.example.com/api/oauth/google/callback>; Authorized JS origin: <https://app.example.com>.
 2) Copy client ID/secret → GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET and set OAUTH_REDIRECT_URI.
 3) DEBUG shortcut: in development without GOOGLE_CLIENT_SECRET, POST to `/api/oauth/google/callback` with form fields `code=x&email=you@example.com` to get tokens.
 
 Umami analytics (SPA)
- 
+
 1) Set VITE_UMAMI_WEBSITE_ID and VITE_UMAMI_SRC. Also add the host to CSP_SCRIPT_SRC and CSP_CONNECT_SRC.
 
 Quotas
- 
+
 - QUOTA_FREE_ACTIVE_CAP=1, QUOTA_PRO_MONTHLY_CAP=20, QUOTA_PRO_PER_SEAT=10, QUOTA_ENTERPRISE_MONTHLY_CAP= (empty for unlimited).
 - Check with GET /api/usage. On quota block, POST /api/proposals returns 402 with X-Quota-Reason.
 
 AI endpoints and gating
- 
+
 - Scoping: Pass `X-Org-ID: <org_id>` to apply AI usage and subscription checks to an organization. Omit to use the personal scope.
 - Gating (production): `/api/ai/write`, `/api/ai/revise`, and `/api/ai/format` require a Pro/Enterprise plan in the chosen scope. Free tier requests are blocked with HTTP 402 and `X-Quota-Reason: ai_requires_pro`.
 - DEBUG bypass: When `DEBUG=1`, AI endpoints allow requests regardless of plan (useful for local development and tests).
@@ -539,7 +539,7 @@ AI endpoints and gating
  - Deterministic sampling: `AI_DETERMINISTIC_SAMPLING=1` (default) forces stable formatting output (`deterministic=1` marker in formatted text). Set to 0 to allow non-deterministic sampling (marker absent). Always on is recommended for export integrity.
 
 Admin/operations
- 
+
 - Add Coolify Scheduled Command (daily) to run: `python manage.py enforce_subscription_periods`
 - Backups: two options
    1) Enable managed Postgres backups in Coolify (recommended if available). Test restore.
@@ -549,7 +549,7 @@ Admin/operations
        - Point Duplicati (or your backup tool) at the /backups path to offload copies off-site.
 
 Media (uploads) backup
- 
+
 - Include the /app/media volume in your backup strategy in addition to the database.
 - Simple snapshots: schedule a nightly job to archive MEDIA_ROOT using the helper script.
       - Script (in repo): `scripts/media_backup.sh` (defaults SOURCE=/app/media, DEST=/backups/media)
@@ -570,14 +570,14 @@ Media (uploads) backup
       - Consider excluding ephemeral export caches if you add any non-persistent temp dirs later.
 
 Uploads behavior and tuning
- 
+
 - Oversized uploads: when a file exceeds FILE_UPLOAD_MAX_BYTES, the API returns HTTP 413 with `{ "error": "file_too_large", "limit": <bytes> }`.
 - Signature/MIME checks: png/jpg/jpeg/pdf/docx are validated with magic bytes and MIME guess; mismatches return 400 (`mismatched_signature` or `mismatched_content_type`).
 - Extraction limits: text/parse work is bounded by TEXT_EXTRACTION_MAX_BYTES to avoid heavy CPU/memory usage.
 - Optional virus scan: set VIRUSSCAN_CMD to a command template (use `{path}` placeholder). Non‑zero exit is treated as infected (400 `infected`); invocation errors fail closed (400 `scan_error`).
 
 Common mistakes (and fixes)
- 
+
 - 403/CSRF or CORS errors: ensure CORS_ALLOWED_ORIGINS and CSRF_TRUSTED_ORIGINS include your https origin, no trailing slashes.
 - 400 on Google OAuth: OAUTH_REDIRECT_URI must exactly match Google console entry; use https.
 - Stripe webhook 401/400: set STRIPE_WEBHOOK_SECRET in production; in DEBUG webhooks accept unsigned JSON.
@@ -606,7 +606,7 @@ Two easy options:
      - DEBUG=1 SECRET_KEY=test DATABASE_URL=postgres://USER:PASS@HOST:5432/DB .venv/bin/python manage.py test -v 2 db_policies.tests
 
 Notes
- 
+
 - If connection.vendor is not "postgresql", the suite is skipped by design.
 - Keep a disposable database for tests; they create/tear down data.
 

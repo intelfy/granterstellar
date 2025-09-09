@@ -11,7 +11,7 @@ def backfill_embeddings(apps, schema_editor):
     start = 0
     total = qs.count()
     while True:
-        batch = list(qs[start:start + BATCH])
+        batch = list(qs[start : start + BATCH])
         if not batch:
             break
         texts = [c.text for c in batch]
@@ -22,7 +22,7 @@ def backfill_embeddings(apps, schema_editor):
             updated += 1
         start += BATCH
     if updated:
-        print(f"Backfilled embeddings for {updated} / {total} AIChunk rows")
+        print(f'Backfilled embeddings for {updated} / {total} AIChunk rows')
 
 
 def noop_reverse(apps, schema_editor):
@@ -32,7 +32,7 @@ def noop_reverse(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("ai", "0006_merge_20250908_aischema"),
+        ('ai', '0006_merge_20250908_aischema'),
     ]
 
     operations = [

@@ -175,9 +175,7 @@ TEXT_EXTRACTION_MAX_BYTES = int(os.getenv('TEXT_EXTRACTION_MAX_BYTES', str(8 * 1
 VIRUSSCAN_CMD = os.getenv('VIRUSSCAN_CMD', '').strip()
 VIRUSSCAN_TIMEOUT_SECONDS = int(os.getenv('VIRUSSCAN_TIMEOUT_SECONDS', '10'))
 ALLOWED_UPLOAD_EXTENSIONS = [
-    ext.strip().lower() for ext in os.getenv(
-        'ALLOWED_UPLOAD_EXTENSIONS', 'pdf,png,jpg,jpeg,docx,txt'
-    ).split(',') if ext
+    ext.strip().lower() for ext in os.getenv('ALLOWED_UPLOAD_EXTENSIONS', 'pdf,png,jpg,jpeg,docx,txt').split(',') if ext
 ]
 
 SIMPLE_JWT = {
@@ -196,7 +194,7 @@ AI_ASYNC = os.getenv('AI_ASYNC', '0') == '1'
 
 INVITE_SENDER_DOMAIN = os.getenv('INVITE_SENDER_DOMAIN', '').strip()
 DEFAULT_FROM_EMAIL = (
-    (f"invites@{INVITE_SENDER_DOMAIN}" if INVITE_SENDER_DOMAIN else None)
+    (f'invites@{INVITE_SENDER_DOMAIN}' if INVITE_SENDER_DOMAIN else None)
     or (f"no-reply@{os.getenv('MAILGUN_DOMAIN', '').strip()}" if os.getenv('MAILGUN_DOMAIN', '').strip() else None)
     or 'no-reply@localhost'
 )

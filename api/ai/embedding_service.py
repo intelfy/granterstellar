@@ -20,25 +20,23 @@ class EmbeddingService:
     _lock = Lock()
 
     def __init__(self) -> None:
-        env_backend = os.getenv("EMBEDDING_BACKEND", "hash").lower()
-        if env_backend not in ("hash", "minilm"):
-            env_backend = "hash"
-        self.backend = cast(Literal["hash", "minilm"], env_backend)
+        env_backend = os.getenv('EMBEDDING_BACKEND', 'hash').lower()
+        if env_backend not in ('hash', 'minilm'):
+            env_backend = 'hash'
+        self.backend = cast(Literal['hash', 'minilm'], env_backend)
 
-        self.model_name = (
-            "placeholder-hash-v1" if self.backend == "hash" else "MiniLM-L6-v2"
-        )
-        self.dim = _HASH_DIM if self.backend == "hash" else 384
+        self.model_name = 'placeholder-hash-v1' if self.backend == 'hash' else 'MiniLM-L6-v2'
+        self.dim = _HASH_DIM if self.backend == 'hash' else 384
         self._model: Any | None = None
 
-        if self.backend == "minilm":  # lazy heavy import; pragma: no cover (optional path)
+        if self.backend == 'minilm':  # lazy heavy import; pragma: no cover (optional path)
             try:  # pragma: no cover
                 from sentence_transformers import SentenceTransformer  # type: ignore
 
-                self._model = SentenceTransformer("all-MiniLM-L6-v2")
+                self._model = SentenceTransformer('all-MiniLM-L6-v2')
             except Exception:  # fallback silently to hash if failure
-                self.backend = cast(Literal["hash", "minilm"], "hash")
-                self.model_name = "placeholder-hash-v1"
+                self.backend = cast(Literal['hash', 'minilm'], 'hash')
+                self.model_name = 'placeholder-hash-v1'
                 self.dim = _HASH_DIM
                 self._model = None
 
@@ -57,7 +55,7 @@ class EmbeddingService:
         if not items:
             return []
 
-        if self.backend == "minilm" and self._model is not None:  # pragma: no cover
+        if self.backend == 'minilm' and self._model is not None:  # pragma: no cover
             try:  # pragma: no cover
                 emb = self._model.encode(items, normalize_embeddings=True)
                 return [[float(x) for x in row] for row in emb]
@@ -67,7 +65,7 @@ class EmbeddingService:
         # hash backend (deterministic pseudo-vector)
         out: list[list[float]] = []
         for text in items:
-            h = hashlib.sha256(text.encode("utf-8")).digest()
+            h = hashlib.sha256(text.encode('utf-8')).digest()
             nums = list(h[: self.dim])
             vec = [n / 255.0 for n in nums]
             if len(vec) < self.dim:  # defensive (should not happen with sha256 slice)
@@ -77,10 +75,10 @@ class EmbeddingService:
 
     def health(self) -> dict[str, Any]:
         return {
-            "backend": self.backend,
-            "model": self.model_name,
-            "dim": self.dim,
-            "ready": self.backend == "hash" or (self._model is not None),
+            'backend': self.backend,
+            'model': self.model_name,
+            'dim': self.dim,
+            'ready': self.backend == 'hash' or (self._model is not None),
         }
 
 

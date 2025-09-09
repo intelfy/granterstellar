@@ -7,7 +7,7 @@ from .models import Organization, OrgUser, OrgInvite
 class UserBriefSerializer(serializers.ModelSerializer):
     class Meta:
         model = get_user_model()
-        fields = ("id", "username", "email")
+        fields = ('id', 'username', 'email')
 
 
 class OrgUserSerializer(serializers.ModelSerializer):
@@ -20,7 +20,7 @@ class OrgUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrgUser
-        fields = ("user", "user_id", "email", "role")
+        fields = ('user', 'user_id', 'email', 'role')
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -28,20 +28,20 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Organization
-        fields = ("id", "name", "description", "admin", "created_at")
+        fields = ('id', 'name', 'description', 'admin', 'created_at')
 
 
 class OrgInviteSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrgInvite
         fields = (
-            "id",
-            "email",
-            "role",
-            "token",
-            "created_at",
-            "accepted_at",
-            "revoked_at",
-            "expires_at",
+            'id',
+            'email',
+            'role',
+            'token',
+            'created_at',
+            'accepted_at',
+            'revoked_at',
+            'expires_at',
         )
-        read_only_fields = ("id", "token", "created_at", "accepted_at", "revoked_at", "expires_at")
+        read_only_fields = ('id', 'token', 'created_at', 'accepted_at', 'revoked_at', 'expires_at')

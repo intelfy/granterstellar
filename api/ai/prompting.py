@@ -16,6 +16,7 @@ Design Notes:
 We deliberately avoid Jinja to reduce attack surface and remove need for a template sandbox.
 The formatting agent and other roles receive deterministic, backend-owned prompt text.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 from .models import AIPromptTemplate, AIJobContext
@@ -24,8 +25,10 @@ import hashlib
 MAX_PROMPT_LEN = 30000
 MAX_VALUE_LEN = 4000
 
+
 class PromptTemplateError(ValueError):
     pass
+
 
 @dataclass(frozen=True)
 class RenderedPrompt:
@@ -36,21 +39,14 @@ class RenderedPrompt:
 
 
 def _get_active_template(role: str) -> AIPromptTemplate | None:
-    qs = (
-        AIPromptTemplate.objects.filter(role=role, active=True)
-        .order_by('-version')
-    )
+    qs = AIPromptTemplate.objects.filter(role=role, active=True).order_by('-version')
     return qs.first()
 
 
 def _fallback_template(role: str) -> tuple[str, list[str]]:
     # Minimal safe fallback; kept intentionally simple.
-    base = (
-        f"ROLE: {role}\n"
-        "Instructions: Follow role guidelines.\n"
-        "Input JSON: {{input_json}}\n"
-    )
-    return base, ["input_json"]
+    base = f'ROLE: {role}\n' 'Instructions: Follow role guidelines.\n' 'Input JSON: {{input_json}}\n'
+    return base, ['input_json']
 
 
 def render_role_prompt(*, role: str, variables: dict[str, object]) -> RenderedPrompt:
@@ -64,13 +60,14 @@ def render_role_prompt(*, role: str, variables: dict[str, object]) -> RenderedPr
 
     # If template has blueprint metadata and role is formatter, append structured blueprint guidance
     if tpl and role == 'formatter' and (tpl.blueprint_schema or tpl.blueprint_instructions):
-        blueprint_block = "\n---\nSTRUCTURE BLUEPRINT INSTRUCTIONS:\n"
+        blueprint_block = '\n---\nSTRUCTURE BLUEPRINT INSTRUCTIONS:\n'
         if tpl.blueprint_instructions:
-            blueprint_block += tpl.blueprint_instructions.strip() + "\n"
+            blueprint_block += tpl.blueprint_instructions.strip() + '\n'
         if tpl.blueprint_schema:
             import json
+
             try:
-                blueprint_block += "SCHEMA JSON:\n" + json.dumps(tpl.blueprint_schema, sort_keys=True) + "\n"
+                blueprint_block += 'SCHEMA JSON:\n' + json.dumps(tpl.blueprint_schema, sort_keys=True) + '\n'
             except Exception:  # pragma: no cover - defensive
                 pass
         raw_tpl = raw_tpl.rstrip() + blueprint_block
@@ -82,7 +79,7 @@ def render_role_prompt(*, role: str, variables: dict[str, object]) -> RenderedPr
             continue
         s = str(v)
         if len(s) > MAX_VALUE_LEN:
-            s = s[:MAX_VALUE_LEN] + "…"
+            s = s[:MAX_VALUE_LEN] + '…'
         # Escape any '{{' or '}}' to prevent confusion
         s = s.replace('{{', '{ {').replace('}}', '} }')
         norm_vars[k] = s
@@ -111,7 +108,7 @@ def render_role_prompt(*, role: str, variables: dict[str, object]) -> RenderedPr
                 # no closing, treat as literal
                 out_parts.append(raw_tpl[i:])
                 break
-            token = raw_tpl[i:j+2]
+            token = raw_tpl[i : j + 2]
             out_parts.append(replace_token(token))
             i = j + 2
         else:
@@ -119,7 +116,7 @@ def render_role_prompt(*, role: str, variables: dict[str, object]) -> RenderedPr
             i += 1
     rendered = ''.join(out_parts)
     if len(rendered) > MAX_PROMPT_LEN:
-        rendered = rendered[:MAX_PROMPT_LEN] + "…"
+        rendered = rendered[:MAX_PROMPT_LEN] + '…'
 
     # Use extended redaction to capture mapping
     redacted, _map = AIJobContext.redact_with_mapping(rendered)
@@ -136,11 +133,13 @@ def render_role_prompt(*, role: str, variables: dict[str, object]) -> RenderedPr
         variables_used=norm_vars,
     )
 
+
 __all__ = [
     'RenderedPrompt',
     'render_role_prompt',
     'PromptTemplateError',
 ]
+
 
 def detect_template_drift(ctx: AIJobContext) -> bool:
     """Return True if stored template checksum differs from current template text.
@@ -153,16 +152,13 @@ def detect_template_drift(ctx: AIJobContext) -> bool:
     # IMPORTANT: ctx.prompt_template may be a stale in-memory instance (tests mutate a different
     # Python object referencing the same DB row). Always refetch current template text from DB.
     try:
-        current_text = (
-            AIPromptTemplate.objects.filter(id=getattr(tpl, 'id', None))
-            .values_list('template', flat=True)
-            .first()
-        )
+        current_text = AIPromptTemplate.objects.filter(id=getattr(tpl, 'id', None)).values_list('template', flat=True).first()
     except Exception:  # pragma: no cover - defensive DB error handling
         return False
     if current_text is None:
         return False
     current = AIPromptTemplate.compute_checksum(current_text)
     return current != ctx.template_sha256
+
 
 __all__.append('detect_template_drift')

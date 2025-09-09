@@ -11,7 +11,7 @@ PRIORITY: 'HIGH'
 
 AI-assisted grant proposal writing for organizations that can't afford a full-time grant writer.
 
-Live Dev: <https://grants.intelfy.dk>  
+Live Dev: <https://grants.intelfy.dk>
 Planned Production: <https://forgranted.io>
 
 ---
@@ -31,13 +31,13 @@ ForGranted turns a raw grant call (URL or text) plus your organization profile i
 
 ## 3. How It Works (High-Level Flow)
 
-1. Input the grant call URL (or paste requirements).  
-2. The planning agent researches + matches templates/samples (RAG) and builds a section blueprint.  
-3. For each section: we ask concise questions to fill real gaps (org metadata reused automatically).  
-4. The writing agent drafts; you review, revise, or request changes (diffs coming).  
-5. Approved sections lock their content (still revisable after unlock while revisions remaining); future memory snippets (usage_count scored) will boost context relevance.  
-6. Formatting agent assembles a final structured proposal (semantic markdown → PDF/DOCX).  
-7. Exports are deterministic: same inputs → same hash (integrity you can trust).  
+1. Input the grant call URL (or paste requirements).
+2. The planning agent researches + matches templates/samples (RAG) and builds a section blueprint.
+3. For each section: we ask concise questions to fill real gaps (org metadata reused automatically).
+4. The writing agent drafts; you review, revise, or request changes (diffs coming).
+5. Approved sections lock their content (still revisable after unlock while revisions remaining); future memory snippets (usage_count scored) will boost context relevance.
+6. Formatting agent assembles a final structured proposal (semantic markdown → PDF/DOCX).
+7. Exports are deterministic: same inputs → same hash (integrity you can trust).
 
 ## 4. Key Features
 
@@ -102,7 +102,7 @@ Pricing tiers finalize prior to public launch; billing is powered by Stripe for 
 
 ## 8. Getting Started (Early Access)
 
-Request early access: (placeholder form / email)  
+Request early access: (placeholder form / email)
 While in private alpha, accounts are provisioned manually. OAuth (Google, GitHub, Facebook) is supported; local password auth is disabled for reduced attack surface.
 
 ## 9. Using the App (Alpha Walkthrough)
@@ -116,16 +116,16 @@ While in private alpha, accounts are provisioned manually. OAuth (Google, GitHub
 
 ## 10. Data Handling & Privacy FAQ
 
-Q: Do you train on my proposal text?  
-A: No. Your data is used only to serve your organization; RAG ingestion of user content is opt-in and scoped.  
+Q: Do you train on my proposal text?
+A: No. Your data is used only to serve your organization; RAG ingestion of user content is opt-in and scoped.
 
-Q: Can staff access my drafts?  
-A: Only for explicit support cases with logged, auditable access (policy to be published).  
+Q: Can staff access my drafts?
+A: Only for explicit support cases with logged, auditable access (policy to be published).
 
-Q: How are personal identifiers treated in prompts?  
-A: Redacted into stable hashed category tokens before logging or evaluation.  
+Q: How are personal identifiers treated in prompts?
+A: Redacted into stable hashed category tokens before logging or evaluation.
 
-Q: Can I delete my account & data?  
+Q: Can I delete my account & data?
 A: Yes—hard delete pipeline (with short grace) scheduled; exports can be downloaded first.
 
 ## 11. Roadmap (Selected Near-Term Items)
@@ -151,7 +151,7 @@ External contribution guidelines will open post-alpha. Until then, internal engi
 
 ## 14. Contact / Early Feedback
 
-Questions, partnership, or early access request: [thomas@intelfy.dk](mailto:thomas@intelfy.dk)  
+Questions, partnership, or early access request: [thomas@intelfy.dk](mailto:thomas@intelfy.dk)
 Security disclosures: see `SECURITY.md` for coordinated disclosure instructions.
 
 ## 15. Legal & Compliance (Preview)

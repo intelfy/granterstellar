@@ -26,18 +26,18 @@ class SeatEnforcementTests(TestCase):
         Subscription.objects.create(owner_user=self.admin, tier='pro', status='active', seats=2)
         self.c.force_authenticate(self.admin)
         # Add m1 to orgA (usage now: admin + m1 = 2)
-        r = self.c.post(f'/api/orgs/{self.orgA.id}/members/', {"user_id": self.m1.id}, format='json')
+        r = self.c.post(f'/api/orgs/{self.orgA.id}/members/', {'user_id': self.m1.id}, format='json')
         self.assertEqual(r.status_code, 201, r.content)
         # Add m2 to orgB (usage would become 3 but seats=2 -> should 402)
-        r = self.c.post(f'/api/orgs/{self.orgB.id}/members/', {"user_id": self.m2.id}, format='json')
+        r = self.c.post(f'/api/orgs/{self.orgB.id}/members/', {'user_id': self.m2.id}, format='json')
         self.assertEqual(r.status_code, 402, r.content)
 
     def test_readding_same_user_across_admin_orgs_does_not_consume_extra(self):
         Subscription.objects.create(owner_user=self.admin, tier='pro', status='active', seats=2)
         self.c.force_authenticate(self.admin)
         # Add m1 to orgA
-        r = self.c.post(f'/api/orgs/{self.orgA.id}/members/', {"user_id": self.m1.id}, format='json')
+        r = self.c.post(f'/api/orgs/{self.orgA.id}/members/', {'user_id': self.m1.id}, format='json')
         self.assertEqual(r.status_code, 201, r.content)
         # Add same m1 to orgB (unique users remain 2: admin + m1)
-        r = self.c.post(f'/api/orgs/{self.orgB.id}/members/', {"user_id": self.m1.id}, format='json')
+        r = self.c.post(f'/api/orgs/{self.orgB.id}/members/', {'user_id': self.m1.id}, format='json')
         self.assertEqual(r.status_code, 201, r.content)

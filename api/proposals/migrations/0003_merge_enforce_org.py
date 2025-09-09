@@ -12,8 +12,8 @@ def noop(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("proposals", "0002_proposal_archived_at"),
-        ("proposals", "0002_require_org_on_proposal"),
+        ('proposals', '0002_proposal_archived_at'),
+        ('proposals', '0002_require_org_on_proposal'),
     ]
 
     operations = [

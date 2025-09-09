@@ -15,14 +15,15 @@ class LoginThrottleTests(TestCase):
         # Ensure URLConf maps /api/token to the throttled view under DEBUG=False
         clear_url_caches()
         import app.urls  # noqa: F401
+
         importlib.reload(app.urls)
 
         # Use default 'login' throttle rate from settings (10/min); exceed it.
         # First 10 attempts should pass
         for _ in range(10):
-            resp = client.post('/api/token', {"username": "alice", "password": "secret"}, format='json')
+            resp = client.post('/api/token', {'username': 'alice', 'password': 'secret'}, format='json')
             self.assertEqual(resp.status_code, 200, resp.content)
 
         # 11th attempt should be rate limited
-        resp = client.post('/api/token', {"username": "alice", "password": "secret"}, format='json')
+        resp = client.post('/api/token', {'username': 'alice', 'password': 'secret'}, format='json')
         self.assertEqual(resp.status_code, 429)

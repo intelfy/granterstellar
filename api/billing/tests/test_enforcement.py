@@ -16,7 +16,13 @@ class EnforcementTests(TestCase):
 
     def test_cancel_and_downgrade_cascade(self):
         # Personal sub set to cancel at period end, already passed
-        sub = Subscription.objects.create(owner_user=self.user, tier='pro', status='active', cancel_at_period_end=True, current_period_end=timezone.now() - timedelta(days=1))
+        sub = Subscription.objects.create(
+            owner_user=self.user,
+            tier='pro',
+            status='active',
+            cancel_at_period_end=True,
+            current_period_end=timezone.now() - timedelta(days=1),
+        )
         # Seed an org subscription mirroring pro
         Subscription.objects.create(owner_org=self.org, tier='pro', status='active')
 

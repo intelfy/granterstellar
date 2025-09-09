@@ -13,18 +13,19 @@ from .utils import proposal_json_to_markdown, render_pdf_from_text, render_docx_
 from .tasks import perform_export
 
 
-@api_view(["POST"])
+@api_view(['POST'])
 @permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
 def create_export(request):
-    proposal_id = request.data.get("proposal_id")
-    fmt = (request.data.get("format") or "md").lower()
-    if fmt not in ("md", "pdf", "docx"):
-        return Response({"error": "invalid_format"}, status=status.HTTP_400_BAD_REQUEST)
+    proposal_id = request.data.get('proposal_id')
+    fmt = (request.data.get('format') or 'md').lower()
+    if fmt not in ('md', 'pdf', 'docx'):
+        return Response({'error': 'invalid_format'}, status=status.HTTP_400_BAD_REQUEST)
     # Scope access: personal (author=user, org is null) or org scope via X-Org-ID
     org = None
-    org_id = request.headers.get("X-Org-ID")
+    org_id = request.headers.get('X-Org-ID')
     if org_id and str(org_id).isdigit():
         from orgs.models import Organization
+
         org = Organization.objects.filter(id=int(org_id)).first()
     try:
         qs = Proposal.objects.all()
@@ -34,7 +35,7 @@ def create_export(request):
             qs = qs.filter(author=request.user, org__isnull=True)
         proposal = qs.get(id=proposal_id)
     except Proposal.DoesNotExist:
-        return Response({"error": "not_found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'not_found'}, status=status.HTTP_404_NOT_FOUND)
 
     job = ExportJob.objects.create(proposal=proposal, format=fmt, status='pending')
 
@@ -42,7 +43,7 @@ def create_export(request):
     if getattr(settings, 'EXPORTS_ASYNC', False) and getattr(settings, 'CELERY_BROKER_URL', ''):
         try:
             perform_export.delay(job.id)
-            return Response({"id": job.id, "status": job.status})
+            return Response({'id': job.id, 'status': job.status})
         except Exception:
             # Fall through to sync if enqueue fails
             pass
@@ -56,9 +57,11 @@ def create_export(request):
         ext = 'md'
         try:
             from app.common.files import compute_checksum
+
             checksum = compute_checksum(data).hex
         except Exception:
             import hashlib as _hl
+
             checksum = _hl.sha256(data).hexdigest()
     elif fmt == 'pdf':
         data, checksum = render_pdf_from_text(md)
@@ -67,9 +70,9 @@ def create_export(request):
         data, checksum = render_docx_from_markdown(md)
         ext = 'docx'
 
-    path = f"exports/proposal-{proposal.id}-{job.id}.{ext}"
+    path = f'exports/proposal-{proposal.id}-{job.id}.{ext}'
     default_storage.save(path, ContentFile(data))
-    url = f"{settings.MEDIA_URL}{path}"
+    url = f'{settings.MEDIA_URL}{path}'
     job.status = 'done'
     job.url = url
     job.checksum = checksum or ''
@@ -80,17 +83,18 @@ def create_export(request):
         proposal.save(update_fields=['downloads'])
     except Exception:
         pass
-    return Response({"id": job.id, "status": job.status, "url": job.url, "checksum": job.checksum})
+    return Response({'id': job.id, 'status': job.status, 'url': job.url, 'checksum': job.checksum})
 
 
-@api_view(["GET"])
+@api_view(['GET'])
 @permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
 def get_export(request, job_id: int):
     # Only allow fetching jobs for proposals the user can access (personal or org scope)
     org = None
-    org_id = request.headers.get("X-Org-ID")
+    org_id = request.headers.get('X-Org-ID')
     if org_id and str(org_id).isdigit():
         from orgs.models import Organization
+
         org = Organization.objects.filter(id=int(org_id)).first()
     try:
         qs = ExportJob.objects.select_related('proposal')
@@ -100,5 +104,5 @@ def get_export(request, job_id: int):
             qs = qs.filter(proposal__author=request.user, proposal__org__isnull=True)
         job = qs.get(id=job_id)
     except ExportJob.DoesNotExist:
-        return Response({"error": "not_found"}, status=status.HTTP_404_NOT_FOUND)
-    return Response({"id": job.id, "status": job.status, "url": job.url, "format": job.format})
+        return Response({'error': 'not_found'}, status=status.HTTP_404_NOT_FOUND)
+    return Response({'id': job.id, 'status': job.status, 'url': job.url, 'format': job.format})

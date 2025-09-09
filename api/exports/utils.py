@@ -22,23 +22,23 @@ def proposal_json_to_markdown(proposal: dict) -> str:
     sections = proposal.get('sections', {}) or {}
     lines = []
     title = _escape_text(meta.get('title') or 'Proposal')
-    lines.append(f"# {title}")
+    lines.append(f'# {title}')
     for key, section in sections.items():
         title = _escape_text(section.get('title') or key)
         content = _escape_text(str(section.get('content') or ''))
-        lines.append("")
-        lines.append(f"## {title}")
+        lines.append('')
+        lines.append(f'## {title}')
         lines.append(content)
-    return "\n".join(lines)
+    return '\n'.join(lines)
 
 
 def _normalize_pdf_for_checksum(data: bytes) -> bytes:
     # Remove/normalize non-deterministic parts: document ID and xref offset
     try:
-        data = re.sub(rb"/ID\s*\[\s*<[^>]*>\s*<[^>]*>\s*\]", b"/ID [<000000><000000>]", data)
-        data = re.sub(rb"startxref\s*\d+", b"startxref 0", data)
-        data = re.sub(rb"/CreationDate\s*\(D:[^\)]+\)", b"/CreationDate (D:19700101000000Z)", data)
-        data = re.sub(rb"/ModDate\s*\(D:[^\)]+\)", b"/ModDate (D:19700101000000Z)", data)
+        data = re.sub(rb'/ID\s*\[\s*<[^>]*>\s*<[^>]*>\s*\]', b'/ID [<000000><000000>]', data)
+        data = re.sub(rb'startxref\s*\d+', b'startxref 0', data)
+        data = re.sub(rb'/CreationDate\s*\(D:[^\)]+\)', b'/CreationDate (D:19700101000000Z)', data)
+        data = re.sub(rb'/ModDate\s*\(D:[^\)]+\)', b'/ModDate (D:19700101000000Z)', data)
     except Exception:
         pass
     return data
@@ -50,10 +50,10 @@ def render_pdf_from_text(text: str) -> tuple[bytes, str]:
     # Deterministic metadata (guarded: ReportLab internals may differ across versions)
     try:  # Accessing protected internals for deterministic metadata; ignore type
         info = c._doc.info  # type: ignore[attr-defined]
-        info.title = "Granterstellar Export"
-        info.author = "Granterstellar"
-        info.creator = "Granterstellar"
-        info.producer = "ReportLab"
+        info.title = 'Granterstellar Export'
+        info.author = 'Granterstellar'
+        info.creator = 'Granterstellar'
+        info.producer = 'ReportLab'
         info.creationDate = 'D:19700101000000Z'
         info.modDate = 'D:19700101000000Z'
     except Exception:  # pragma: no cover - defensive
@@ -71,18 +71,20 @@ def render_pdf_from_text(text: str) -> tuple[bytes, str]:
     data = buffer.getvalue()
     # Post-process raw PDF to enforce epoch Creation/Mod dates so raw bytes deterministic
     try:
-        data = re.sub(rb"/CreationDate\s*\(D:[^\)]+\)", b"/CreationDate (D:19700101000000Z)", data)
-        data = re.sub(rb"/ModDate\s*\(D:[^\)]+\)", b"/ModDate (D:19700101000000Z)", data)
+        data = re.sub(rb'/CreationDate\s*\(D:[^\)]+\)', b'/CreationDate (D:19700101000000Z)', data)
+        data = re.sub(rb'/ModDate\s*\(D:[^\)]+\)', b'/ModDate (D:19700101000000Z)', data)
     except Exception:  # pragma: no cover - defensive
         pass
     normalized = _normalize_pdf_for_checksum(data)
     # Defer to common checksum utility for consistency
     try:
         from app.common.files import compute_checksum  # local import to avoid early app loading side-effects
+
         checksum = compute_checksum(normalized).hex
     except Exception:
         # Fallback to direct hashlib if utility unavailable (defensive during migrations)
         import hashlib as _hl
+
         checksum = _hl.sha256(normalized).hexdigest()
     return data, checksum
 
@@ -107,7 +109,7 @@ def render_docx_from_markdown(md: str) -> tuple[bytes, str]:
     for raw in md.splitlines():
         line = raw.rstrip()
         if not line:
-            doc.add_paragraph("")
+            doc.add_paragraph('')
             continue
         if line.startswith('# '):
             p = doc.add_heading(line[2:].strip(), level=1)
@@ -122,9 +124,10 @@ def render_docx_from_markdown(md: str) -> tuple[bytes, str]:
     # Deterministic core properties
     try:
         core = doc.core_properties
-        core.title = "Granterstellar Export"
-        core.author = "Granterstellar"
+        core.title = 'Granterstellar Export'
+        core.author = 'Granterstellar'
         from datetime import datetime, timezone
+
         epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
         core.created = epoch
         core.modified = epoch
@@ -153,8 +156,10 @@ def render_docx_from_markdown(md: str) -> tuple[bytes, str]:
     data = _normalize_docx_zip(raw)
     try:
         from app.common.files import compute_checksum
+
         checksum = compute_checksum(data).hex
     except Exception:
         import hashlib as _hl
+
         checksum = _hl.sha256(data).hexdigest()
     return data, checksum

@@ -6,7 +6,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -22,7 +21,14 @@ class Migration(migrations.Migration):
                 ('description', models.TextField(blank=True, default='')),
                 ('files_meta', models.JSONField(blank=True, default=dict)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('admin', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='admin_organizations', to=settings.AUTH_USER_MODEL)),
+                (
+                    'admin',
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name='admin_organizations',
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
@@ -30,8 +36,18 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('role', models.CharField(choices=[('admin', 'Admin'), ('member', 'Member')], default='member', max_length=16)),
-                ('org', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='memberships', to='orgs.organization')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='org_memberships', to=settings.AUTH_USER_MODEL)),
+                (
+                    'org',
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name='memberships', to='orgs.organization'
+                    ),
+                ),
+                (
+                    'user',
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name='org_memberships', to=settings.AUTH_USER_MODEL
+                    ),
+                ),
             ],
             options={
                 'unique_together': {('org', 'user')},

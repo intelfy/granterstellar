@@ -62,16 +62,17 @@ def stripe_webhook(request):
     # Allow unsigned only in DEBUG test runs for specific, safe-to-simulate events.
     # If a test explicitly sets DEBUG=False to emulate production, do NOT relax.
     relax_in_tests = bool(
-        getattr(settings, 'TESTING', False)
-        and event_type_hint in allowed_relax_types
-        and not secret
-        and not sig_header
+        getattr(settings, 'TESTING', False) and event_type_hint in allowed_relax_types and not secret and not sig_header
     )
     # In production (DEBUG=False): enforce configuration and signature if secret is set
     if not settings.DEBUG and not relax_in_tests:
         # Trace branch usage in tests to diagnose unexpected 400s
         if getattr(settings, 'TESTING', False):
-            logger.warning("stripe_webhook: prod-branch with TESTING=True (unexpected). secret_set=%s sig_header=%s", bool(secret), bool(sig_header))
+            logger.warning(
+                'stripe_webhook: prod-branch with TESTING=True (unexpected). secret_set=%s sig_header=%s',
+                bool(secret),
+                bool(sig_header),
+            )
         if not secret:
             if getattr(settings, 'TESTING', False):
                 logger.warning('stripe_webhook: returning 400 webhook not configured')
@@ -392,9 +393,13 @@ def stripe_webhook(request):
             if total_extras > 0:
                 month = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0).date()
                 if owner_org is not None:
-                    obj, _ = ExtraCredits.objects.get_or_create(owner_org=owner_org, owner_user=None, month=month, defaults={'proposals': 0})
+                    obj, _ = ExtraCredits.objects.get_or_create(
+                        owner_org=owner_org, owner_user=None, month=month, defaults={'proposals': 0}
+                    )
                 else:
-                    obj, _ = ExtraCredits.objects.get_or_create(owner_user=owner_user, owner_org=None, month=month, defaults={'proposals': 0})
+                    obj, _ = ExtraCredits.objects.get_or_create(
+                        owner_user=owner_user, owner_org=None, month=month, defaults={'proposals': 0}
+                    )
                 obj.proposals = int(obj.proposals or 0) + int(total_extras)
                 obj.save(update_fields=['proposals'])
         except Exception:
@@ -420,7 +425,9 @@ def stripe_webhook(request):
                 promo = disc.get('promotion_code') if isinstance(disc, dict) else None
                 if isinstance(promo, dict):
                     promo = promo.get('id')
-                coupon_id = coupon_obj.get('id') if isinstance(coupon_obj, dict) else (coupon if isinstance(coupon, str) else None)
+                coupon_id = (
+                    coupon_obj.get('id') if isinstance(coupon_obj, dict) else (coupon if isinstance(coupon, str) else None)
+                )
                 discount = None
                 if promo or coupon_id:
                     discount = {

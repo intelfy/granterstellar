@@ -13,6 +13,13 @@ repos:
       - id: ruff
         args: ["--fix"]
       - id: ruff-format
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v9.11.0
+    hooks:
+        - id: eslint
+          additional_dependencies: ["eslint@9.11.1", "@eslint/js@9.11.1"]
+          files: "^web/src/.*\\.(js|jsx|ts|tsx)$"
+          args: ["--config","web/eslint.config.js"]
   - repo: local
     hooks:
       - id: secret-scan

@@ -8,7 +8,7 @@ import time
     DEBUG=True,  # AllowAny on endpoints
     AI_ASYNC=1,
     CELERY_TASK_ALWAYS_EAGER=True,  # Run Celery tasks synchronously in-process
-    CELERY_BROKER_URL="memory://",
+    CELERY_BROKER_URL='memory://',
 )
 class AIAsyncJobTests(TestCase):
     def setUp(self):
@@ -18,38 +18,44 @@ class AIAsyncJobTests(TestCase):
         t0 = time.time()
         last = None
         while time.time() - t0 < timeout_s:
-            resp_any = cast(Any, self.api.get(f"/api/ai/jobs/{job_id}"))
+            resp_any = cast(Any, self.api.get(f'/api/ai/jobs/{job_id}'))
             assert resp_any.status_code == 200
             last = resp_any.json()
-            if last.get("status") in {"done", "error"}:
+            if last.get('status') in {'done', 'error'}:
                 return last
             time.sleep(0.05)
         return last
 
     def test_async_write_job_succeeds(self):
-        r_any = cast(Any, self.api.post(
-            "/api/ai/write",
-            {"section_id": "summary", "answers": {"objective": "impact"}},
-            format="json",
-        ))
+        r_any = cast(
+            Any,
+            self.api.post(
+                '/api/ai/write',
+                {'section_id': 'summary', 'answers': {'objective': 'impact'}},
+                format='json',
+            ),
+        )
         assert r_any.status_code == 200
         data = r_any.json()
-        assert "job_id" in data
-        job = self._wait_for_done(data["job_id"]) or {}
-        assert job.get("status") == "done", job
-        result = job.get("result") or {}
-        assert "draft_text" in result, result
+        assert 'job_id' in data
+        job = self._wait_for_done(data['job_id']) or {}
+        assert job.get('status') == 'done', job
+        result = job.get('result') or {}
+        assert 'draft_text' in result, result
 
     def test_async_format_job_succeeds(self):
-        r_any = cast(Any, self.api.post(
-            "/api/ai/format",
-            {"full_text": "Hello world", "template_hint": "standard"},
-            format="json",
-        ))
+        r_any = cast(
+            Any,
+            self.api.post(
+                '/api/ai/format',
+                {'full_text': 'Hello world', 'template_hint': 'standard'},
+                format='json',
+            ),
+        )
         assert r_any.status_code == 200
         data = r_any.json()
-        assert "job_id" in data
-        job = self._wait_for_done(data["job_id"]) or {}
-        assert job.get("status") == "done", job
-        result = job.get("result") or {}
-        assert "formatted_text" in result, result
+        assert 'job_id' in data
+        job = self._wait_for_done(data['job_id']) or {}
+        assert job.get('status') == 'done', job
+        result = job.get('result') or {}
+        assert 'formatted_text' in result, result

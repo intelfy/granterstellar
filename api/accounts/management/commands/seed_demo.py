@@ -12,9 +12,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         User = get_user_model()
-        demo, created = User.objects.get_or_create(
-            username='demo', defaults={'email': 'demo@example.com'}
-        )
+        demo, created = User.objects.get_or_create(username='demo', defaults={'email': 'demo@example.com'})
         # Always reset password for convenience in local dev
         demo.set_password('demo12345')
         demo.save()
@@ -36,9 +34,7 @@ class Command(BaseCommand):
                     'sections': {
                         'summary': {
                             'title': 'Executive Summary',
-                            'content': (
-                                'Lorem ipsum dolor sit amet, consectetur adipiscing elit.'
-                            ),
+                            'content': ('Lorem ipsum dolor sit amet, consectetur adipiscing elit.'),
                         },
                         'plan': {
                             'title': 'Project Plan',
@@ -47,9 +43,7 @@ class Command(BaseCommand):
                     },
                 },
             )
-            self.stdout.write(
-                self.style.SUCCESS("Created a sample proposal for 'demo'.")
-            )
+            self.stdout.write(self.style.SUCCESS("Created a sample proposal for 'demo'."))
         else:
             self.stdout.write('Demo user already has a proposal; skipping creation.')
 

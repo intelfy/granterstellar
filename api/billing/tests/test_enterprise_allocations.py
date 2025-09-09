@@ -51,4 +51,3 @@ class EnterpriseAllocationTests(TestCase):
         eff = res.json().get('enterprise_effective_caps')
         self.assertEqual(eff[str(self.org1.id)], 80)
         self.assertEqual(eff[str(self.org2.id)], 50)
-

@@ -1,13 +1,13 @@
 from django.db import migrations
 
 
-SQL = r'''
+SQL = r"""
 -- Ensure RLS is enforced even for table owners (Django connections often use owner)
 ALTER TABLE IF EXISTS orgs_organization FORCE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS orgs_orguser FORCE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS proposals_proposal FORCE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS billing_subscription FORCE ROW LEVEL SECURITY;
-'''
+"""
 
 
 def forwards(apps, schema_editor):

@@ -10,7 +10,7 @@ class AIMemorySuggestionsViewTests(TestCase):
         self.client.login(username='viewer', password='pw')
 
     def _auth_get(self, path, **headers):  # helper for authenticated GET with optional org header
-        return self.client.get(path, **{"HTTP_X_ORG_ID": headers.get('org_id', '')})
+        return self.client.get(path, **{'HTTP_X_ORG_ID': headers.get('org_id', '')})
 
     def test_empty_initial(self):
         resp = self._auth_get('/api/ai/memory/suggestions')

@@ -1,7 +1,7 @@
 from django.db import migrations
 
 
-SQL = r'''
+SQL = r"""
 -- Break recursive policy chain between orgs_organization <-> orgs_orguser by
 -- removing orgs_organization references from the OrgUser READ policy.
 -- Keep WRITE (ALL) policy for OrgUser to still enforce org-admin checks via orgs_organization.
@@ -12,7 +12,7 @@ CREATE POLICY orgusers_read ON orgs_orguser
     FOR SELECT USING (
         user_id = app.current_user_id()
     );
-'''
+"""
 
 
 def forwards(apps, schema_editor):

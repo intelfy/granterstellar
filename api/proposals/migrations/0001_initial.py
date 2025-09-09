@@ -6,7 +6,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -19,15 +18,34 @@ class Migration(migrations.Migration):
             name='Proposal',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('state', models.CharField(choices=[('draft', 'Draft'), ('final', 'Final'), ('archived', 'Archived')], default='draft', max_length=16)),
+                (
+                    'state',
+                    models.CharField(
+                        choices=[('draft', 'Draft'), ('final', 'Final'), ('archived', 'Archived')], default='draft', max_length=16
+                    ),
+                ),
                 ('last_edited', models.DateTimeField(auto_now=True)),
                 ('downloads', models.IntegerField(default=0)),
                 ('content', models.JSONField(default=dict)),
                 ('schema_version', models.CharField(default='v1', max_length=16)),
                 ('shared_with', models.JSONField(blank=True, default=list)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('author', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='proposals', to=settings.AUTH_USER_MODEL)),
-                ('org', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='proposals', to='orgs.organization')),
+                (
+                    'author',
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name='proposals', to=settings.AUTH_USER_MODEL
+                    ),
+                ),
+                (
+                    'org',
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name='proposals',
+                        to='orgs.organization',
+                    ),
+                ),
             ],
         ),
     ]

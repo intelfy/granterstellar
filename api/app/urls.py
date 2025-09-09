@@ -26,20 +26,20 @@ def healthz(_request):
     return HttpResponse('ok')
 
 
-@api_view(["GET"])
+@api_view(['GET'])
 @permission_classes([AllowAny])
 def api_healthz(_request):
-    return Response({"status": "ok"})
+    return Response({'status': 'ok'})
 
 
-@api_view(["GET"])
+@api_view(['GET'])
 @permission_classes([AllowAny])
 def api_health(_request):
     """Lightweight liveness probe (no DB)."""
-    return Response({"status": "ok"})
+    return Response({'status': 'ok'})
 
 
-@api_view(["GET"])
+@api_view(['GET'])
 @permission_classes([AllowAny])
 def api_ready(_request):
     """Readiness probe: checks DB and (optionally) cache connectivity.
@@ -53,6 +53,7 @@ def api_ready(_request):
     # DB check
     try:
         from django.db import connections
+
         with connections['default'].cursor() as cur:  # type: ignore[index]
             cur.execute('SELECT 1')
             cur.fetchone()
@@ -62,6 +63,7 @@ def api_ready(_request):
     # Cache check (only if configured)
     try:
         from django.core.cache import cache
+
         test_key = 'ready_probe'
         cache.set(test_key, '1', 5)
         val = cache.get(test_key)
@@ -69,7 +71,7 @@ def api_ready(_request):
     except Exception as exc:  # pragma: no cover
         details['cache_error'] = str(exc)[:200]
     status = 'ok' if db_ok else 'error'
-    payload = {"status": status, "db": db_ok, "cache": cache_ok, "details": details}
+    payload = {'status': status, 'db': db_ok, 'cache': cache_ok, 'details': details}
     if status == 'error':
         # Wrap in standardized error format while still including top-level keys for backward compatibility.
         err = error_response('ready_check_failed', 'One or more readiness checks failed', status=503, meta=payload)
@@ -84,8 +86,8 @@ router.register(r'orgs', OrganizationViewSet, basename='org')
 urlpatterns = [
     path('healthz', healthz),
     path('api/healthz', api_healthz),  # legacy simple probe
-    path('api/health', api_health),    # lightweight liveness
-    path('api/ready', api_ready),      # readiness (db/cache)
+    path('api/health', api_health),  # lightweight liveness
+    path('api/ready', api_ready),  # readiness (db/cache)
     path('api/me', MeView.as_view()),
     # In DEBUG, route password logins through a view that marks the user as Pro tier for testing
     path('api/token', DebugTokenObtainPairView.as_view() if settings.DEBUG else ThrottledTokenObtainPairView.as_view()),
@@ -174,6 +176,7 @@ def _root_entrypoint(request):
     """
     host = (request.get_host() or '').split(':')[0].lower()
     from django.conf import settings as _s
+
     if host and getattr(_s, 'APP_HOSTS', None):
         if host in _s.APP_HOSTS:
             return HttpResponseRedirect('/app')

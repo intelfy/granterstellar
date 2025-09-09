@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, apiMaybeAsync, apiUpload, safeOpenExternal, openDebugLocal, formatDiscount } from '../lib/core.js'
-import { t, KEYS } from '../keys.generated'
+import { t } from '../keys.generated'
 import _MemorySuggestions from '../components/MemorySuggestions.jsx'
 
 function AuthorPanel({ token, orgId, proposal, onSaved, _usage, _onUpgrade }) {
@@ -331,10 +331,13 @@ export function Proposals({ token, selectedOrgId }) {
   const [fmtById, setFmtById] = useState({})
   const [orgId, setOrgId] = useState(() => localStorage.getItem('orgId') || '')
   const [openAuthorForId, setOpenAuthorForId] = useState(null)
+  // Resolve a human-readable paywall reason by attempting translation; if the key
+  // is missing t() returns the key itself, so we fall back to the raw code without
+  // ever touching the KEYS object (eliminates intermittent ReferenceError in tests).
   const reasonLabel = (code) => {
     const k = `ui.paywall.reasons.${code}`
-    if (k in KEYS) return t(k)
-    return code
+    const translated = t(k)
+    return translated === k ? code : translated
   }
   const isPaidActive = (u) => u && u.tier !== 'free' && (u.status === 'active' || u.status === 'trialing')
   const archive = async (p) => {

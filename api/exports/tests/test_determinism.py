@@ -20,19 +20,20 @@ except Exception:  # pragma: no cover - fallback (should not normally happen)
 
         return _Obj()
 
+
 class ExportDeterminismTests(TestCase):
     def setUp(self):
         U = get_user_model()
-        self.user = U.objects.create_user(username="e", password="p")
-        self.org = Organization.objects.create(name="ExpOrg", admin=self.user)
+        self.user = U.objects.create_user(username='e', password='p')
+        self.org = Organization.objects.create(name='ExpOrg', admin=self.user)
         self.proposal = Proposal.objects.create(
             author=self.user,
             org=self.org,
             content={
-                "meta": {"title": "Deterministic"},
-                "sections": {
-                    "summary": {"title": "Executive Summary", "content": "Hello world"},
-                    "plan": {"title": "Plan", "content": "Do X\nThen Y"},
+                'meta': {'title': 'Deterministic'},
+                'sections': {
+                    'summary': {'title': 'Executive Summary', 'content': 'Hello world'},
+                    'plan': {'title': 'Plan', 'content': 'Do X\nThen Y'},
                 },
             },
         )
@@ -43,8 +44,8 @@ class ExportDeterminismTests(TestCase):
         # Raw markdown must be identical when generated twice from same proposal JSON
         self.assertEqual(md1, md2)
         # Checksum must also be stable
-        h1 = compute_checksum(md1.encode("utf-8")).hex
-        h2 = compute_checksum(md2.encode("utf-8")).hex
+        h1 = compute_checksum(md1.encode('utf-8')).hex
+        h2 = compute_checksum(md2.encode('utf-8')).hex
         self.assertEqual(h1, h2)
 
     def test_pdf_deterministic(self):
@@ -77,4 +78,3 @@ class ExportDeterminismTests(TestCase):
         self.assertIn(b'/ModDate (D:19700101000000Z)', normalized)
         # Basic sanity: checksum is hex of length 64
         self.assertEqual(len(checksum), 64)
-

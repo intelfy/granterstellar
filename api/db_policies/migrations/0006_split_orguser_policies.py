@@ -1,7 +1,7 @@
 from django.db import migrations
 
 
-SQL = r'''
+SQL = r"""
 -- Remove broad FOR ALL policy which referenced orgs_organization and caused recursion on SELECT
 DROP POLICY IF EXISTS orgusers_write ON orgs_orguser;
 
@@ -42,7 +42,7 @@ CREATE POLICY orgusers_delete ON orgs_orguser
             SELECT 1 FROM orgs_organization o WHERE o.id = orgs_orguser.org_id AND o.admin_id = app.current_user_id()
         )
     );
-'''
+"""
 
 
 def forwards(apps, schema_editor):

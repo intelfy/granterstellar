@@ -18,9 +18,11 @@ def perform_export(job_id: int):
         data = md.encode('utf-8')
         try:
             from app.common.files import compute_checksum
+
             checksum = compute_checksum(data).hex
         except Exception:
             import hashlib as _hl
+
             checksum = _hl.sha256(data).hexdigest()
         ext = 'md'
     elif job.format == 'pdf':
@@ -29,9 +31,9 @@ def perform_export(job_id: int):
     else:
         data, checksum = render_docx_from_markdown(md)
         ext = 'docx'
-    path = f"exports/proposal-{proposal.id}-{job.id}.{ext}"
+    path = f'exports/proposal-{proposal.id}-{job.id}.{ext}'
     default_storage.save(path, ContentFile(data))
-    url = f"{settings.MEDIA_URL}{path}"
+    url = f'{settings.MEDIA_URL}{path}'
     job.status = 'done'
     job.url = url
     job.checksum = checksum or ''

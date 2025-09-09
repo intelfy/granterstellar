@@ -4,7 +4,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ('ai', '0003_aijobcontext'),
     ]
@@ -14,7 +13,13 @@ class Migration(migrations.Migration):
             name='AIResource',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('type', models.CharField(choices=[('template', 'template'), ('sample', 'sample'), ('call_snapshot', 'call_snapshot')], max_length=32)),
+                (
+                    'type',
+                    models.CharField(
+                        choices=[('template', 'template'), ('sample', 'sample'), ('call_snapshot', 'call_snapshot')],
+                        max_length=32,
+                    ),
+                ),
                 ('title', models.CharField(blank=True, default='', max_length=256)),
                 ('source_url', models.URLField(blank=True, default='')),
                 ('sha256', models.CharField(db_index=True, max_length=64)),
@@ -38,7 +43,10 @@ class Migration(migrations.Migration):
                 ('embedding_key', models.CharField(blank=True, default='', max_length=64)),
                 ('metadata', models.JSONField(default=dict)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('resource', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='chunks', to='ai.airesource')),
+                (
+                    'resource',
+                    models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='chunks', to='ai.airesource'),
+                ),
             ],
             options={
                 'constraints': [

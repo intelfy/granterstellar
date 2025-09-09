@@ -20,8 +20,18 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('accepted_at', models.DateTimeField(blank=True, null=True)),
                 ('revoked_at', models.DateTimeField(blank=True, null=True)),
-                ('invited_by', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='sent_org_invites', to=settings.AUTH_USER_MODEL)),
-                ('org', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='invites', to='orgs.organization')),
+                (
+                    'invited_by',
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name='sent_org_invites', to=settings.AUTH_USER_MODEL
+                    ),
+                ),
+                (
+                    'org',
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name='invites', to='orgs.organization'
+                    ),
+                ),
             ],
         ),
         migrations.AddIndex(

@@ -4,21 +4,22 @@ from app.common import files
 
 class FileUtilsTests(SimpleTestCase):
     def test_safe_filename_basic(self):
-        self.assertEqual(files.safe_filename("My Report.pdf"), "My-Report.pdf")
+        self.assertEqual(files.safe_filename('My Report.pdf'), 'My-Report.pdf')
 
     def test_safe_filename_unicode_and_length(self):
-        name = "Åccentuated 文件 名称 😀.txt"
+        name = 'Åccentuated 文件 名称 😀.txt'
         out = files.safe_filename(name, max_length=32)
         self.assertTrue(out.endswith('.txt'))
         self.assertLessEqual(len(out), 32)
         self.assertNotIn(' ', out)
 
     def test_checksum_equivalence_bytes_and_path(self):
-        data = b"hello world" * 1000
+        data = b'hello world' * 1000
         c1 = files.compute_checksum(data)
         # write temp file
         import tempfile
         import os
+
         fd, path = tempfile.mkstemp()
         try:
             with os.fdopen(fd, 'wb') as f:
@@ -31,7 +32,8 @@ class FileUtilsTests(SimpleTestCase):
     def test_read_text_file_truncation(self):
         import tempfile
         import os
-        content = ("abc" * 100).encode()
+
+        content = ('abc' * 100).encode()
         fd, path = tempfile.mkstemp()
         try:
             with os.fdopen(fd, 'wb') as f:
@@ -44,7 +46,8 @@ class FileUtilsTests(SimpleTestCase):
     def test_write_bytes_and_iter_chunks(self):
         import tempfile
         import os
-        data = b"x" * (2 * 1024 * 1024 + 123)
+
+        data = b'x' * (2 * 1024 * 1024 + 123)
         fd, path = tempfile.mkstemp()
         os.close(fd)
         try:

@@ -1,7 +1,7 @@
 from django.db import migrations
 
 
-SQL = r'''
+SQL = r"""
 -- Adjust OrgUser policies to also allow actions when current session role is admin for the target org
 DROP POLICY IF EXISTS orgusers_insert ON orgs_orguser;
 CREATE POLICY orgusers_insert ON orgs_orguser
@@ -46,7 +46,7 @@ CREATE POLICY orgusers_delete ON orgs_orguser
             app.current_role() = 'admin' AND app.current_org_id() = orgs_orguser.org_id
         )
     );
-'''
+"""
 
 
 def forwards(apps, schema_editor):

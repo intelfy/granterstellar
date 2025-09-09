@@ -1,7 +1,7 @@
 from django.db import migrations
 
 
-SQL = r'''
+SQL = r"""
 -- Organizations: allow creating/deleting by admin (current user must match admin_id)
 DROP POLICY IF EXISTS orgs_insert ON orgs_organization;
 CREATE POLICY orgs_insert ON orgs_organization
@@ -59,7 +59,7 @@ CREATE POLICY proposals_delete ON proposals_proposal
             SELECT 1 FROM orgs_organization o WHERE o.id = proposals_proposal.org_id AND o.admin_id = app.current_user_id()
         ))
     );
-'''
+"""
 
 
 def forwards(apps, schema_editor):

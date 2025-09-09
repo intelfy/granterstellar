@@ -1,5 +1,6 @@
 from django.db import migrations
 
+
 class Migration(migrations.Migration):
     """Merge conflicting migration branches.
 
@@ -11,8 +12,8 @@ class Migration(migrations.Migration):
     changes (field addition + index renames)."""
 
     dependencies = [
-        ("ai", "0005_aichunk_embedding"),
-        ("ai", "0005_rename_ai_mem_org_section_idx_ai_aimemory_org_id_c0a075_idx_and_more"),
+        ('ai', '0005_aichunk_embedding'),
+        ('ai', '0005_rename_ai_mem_org_section_idx_ai_aimemory_org_id_c0a075_idx_and_more'),
     ]
 
     operations = []

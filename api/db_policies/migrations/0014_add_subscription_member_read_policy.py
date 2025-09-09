@@ -17,11 +17,13 @@ CREATE POLICY subscriptions_read_members ON billing_subscription
     );
 """
 
+
 def forwards(apps, schema_editor):
     if schema_editor.connection.vendor != 'postgresql':
         return
     with schema_editor.connection.cursor() as cur:
         cur.execute(SQL)
+
 
 class Migration(migrations.Migration):
     dependencies = [

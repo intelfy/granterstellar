@@ -4,6 +4,7 @@ Loads `locales/en.yml`, flattens nested dictionaries into dot keys, and exposes 
 `t(key, **kwargs)` helper for interpolation. Designed to be minimal now while
 allowing future locale expansion.
 """
+
 from __future__ import annotations
 
 import threading
@@ -14,13 +15,13 @@ import yaml
 
 _LOCK = threading.RLock()
 _KEYS: dict[str, str] = {}
-_LOCALE_FILE = Path(__file__).resolve().parents[3] / "locales" / "en.yml"
+_LOCALE_FILE = Path(__file__).resolve().parents[3] / 'locales' / 'en.yml'
 _LAST_MTIME: float | None = None
 
 
 def _flatten(prefix: str, data: dict[str, Any], out: dict[str, str]) -> None:
     for k, v in data.items():
-        key = f"{prefix}.{k}" if prefix else k
+        key = f'{prefix}.{k}' if prefix else k
         if isinstance(v, dict):
             _flatten(key, v, out)
         else:
@@ -37,11 +38,11 @@ def _load(force: bool = False) -> None:
     if not force and _LAST_MTIME is not None and mtime == _LAST_MTIME:
         return
     with _LOCK:
-        with _LOCALE_FILE.open("r", encoding="utf-8") as f:
+        with _LOCALE_FILE.open('r', encoding='utf-8') as f:
             raw = yaml.safe_load(f) or {}
         flat: dict[str, str] = {}
         if isinstance(raw, dict):
-            _flatten("", raw, flat)
+            _flatten('', raw, flat)
         _KEYS = flat
         _LAST_MTIME = mtime
 
@@ -55,7 +56,7 @@ def t(key: str, **kwargs: Any) -> str:
     # Hot reload in DEBUG (simple mtime check). Avoid importing settings at module import time.
     from django.conf import settings  # local import to avoid early settings access
 
-    if getattr(settings, "DEBUG", False):
+    if getattr(settings, 'DEBUG', False):
         try:
             _load()
         except Exception:  # pragma: no cover - never raise in production path
@@ -77,4 +78,4 @@ def ready() -> None:
         pass
 
 
-__all__ = ["t", "ready"]
+__all__ = ['t', 'ready']

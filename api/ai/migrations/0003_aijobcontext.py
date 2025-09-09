@@ -4,7 +4,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ('ai', '0002_aiprompttemplate'),
     ]
@@ -21,7 +20,12 @@ class Migration(migrations.Migration):
                 ('retrieval_metrics', models.JSONField(default=dict)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('job', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='contexts', to='ai.aijob')),
-                ('prompt_template', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='ai.aiprompttemplate')),
+                (
+                    'prompt_template',
+                    models.ForeignKey(
+                        blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='ai.aiprompttemplate'
+                    ),
+                ),
             ],
             options={
                 'indexes': [

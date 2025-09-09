@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ('ai', '0008_rename_ai_aichunk_resource_id_idx_ai_aichunk_resourc_1c8a69_idx_and_more'),
     ]
@@ -33,6 +32,15 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='aimetric',
             name='type',
-            field=models.CharField(choices=[('plan', 'plan'), ('write', 'write'), ('revise', 'revise'), ('format', 'format'), ('promote', 'promote')], max_length=16),
+            field=models.CharField(
+                choices=[
+                    ('plan', 'plan'),
+                    ('write', 'write'),
+                    ('revise', 'revise'),
+                    ('format', 'format'),
+                    ('promote', 'promote'),
+                ],
+                max_length=16,
+            ),
         ),
     ]

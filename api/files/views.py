@@ -15,11 +15,13 @@ import tempfile
 from shlex import split as shlex_split
 from django.core.exceptions import SuspiciousOperation
 
+
 def _ocr_image_if_enabled(path: str, content_type: str) -> str:
     """Optional OCR for images when OCR_IMAGE=1 and pytesseract/PIL are available.
     Falls back to empty string on any error.
     """
     import os as _os
+
     if _os.getenv('OCR_IMAGE', '0') != '1':
         return ''
     try:
@@ -51,7 +53,7 @@ def _extract_pdf_text(path: str) -> str:
     try:
         txt = extract_text(path) or ''
         # Normalize whitespace a bit
-        txt = re.sub(r"\s+", " ", txt).strip()
+        txt = re.sub(r'\s+', ' ', txt).strip()
         return txt[:50000]
     except Exception:
         return ''
@@ -87,6 +89,7 @@ def _ocr_pdf_if_enabled(path: str) -> str:
         # Now extract text from the OCR'd PDF
         return _extract_pdf_text(out_pdf)
 
+
 def _has_signature(path: str, ext: str) -> bool:
     # Ensure we only touch files stored under MEDIA_ROOT
     if not _is_under_media_root(path):
@@ -98,9 +101,9 @@ def _has_signature(path: str, ext: str) -> bool:
         if ext == 'pdf':
             return head.startswith(b'%PDF')
         if ext == 'png':
-            return head.startswith(b"\x89PNG\r\n\x1a\n")
+            return head.startswith(b'\x89PNG\r\n\x1a\n')
         if ext in ('jpg', 'jpeg'):
-            return head.startswith(b"\xFF\xD8")
+            return head.startswith(b'\xff\xd8')
         if ext == 'docx':
             # DOCX is a ZIP: PK\x03\x04
             return head.startswith(b'PK\x03\x04')
@@ -113,6 +116,7 @@ def _has_signature(path: str, ext: str) -> bool:
 ALLOWED = set(settings.ALLOWED_UPLOAD_EXTENSIONS)
 MAX_BYTES = int(getattr(settings, 'FILE_UPLOAD_MAX_BYTES', getattr(settings, 'FILE_UPLOAD_MAX_MEMORY_SIZE', 10 * 1024 * 1024)))
 TEXT_MAX = int(getattr(settings, 'TEXT_EXTRACTION_MAX_BYTES', 8 * 1024 * 1024))
+
 
 def _is_under_media_root(p: str) -> bool:
     """Return True if p is a regular file under MEDIA_ROOT (no symlinks).
@@ -158,15 +162,13 @@ def _extract_text_stub(path: str, content_type: str) -> str:
         if ocr_txt:
             return ocr_txt
         return ''
-    if (
-        content_type in (
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/msword',
-        )
-        or path.lower().endswith('.docx')
-    ):
+    if content_type in (
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/msword',
+    ) or path.lower().endswith('.docx'):
         try:
             from docx import Document  # type: ignore
+
             # Avoid parsing extremely large documents
             if os.path.getsize(path) > TEXT_MAX:
                 return ''
@@ -185,28 +187,28 @@ def _extract_text_stub(path: str, content_type: str) -> str:
     return ''
 
 
-@api_view(["POST"])
+@api_view(['POST'])
 @permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
 @parser_classes([MultiPartParser, FormParser])
 def upload(request):
     f = request.FILES.get('file')
     if not f:
-        return Response({"error": "missing_file"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'missing_file'}, status=status.HTTP_400_BAD_REQUEST)
     # Normalize filename: strip paths and suspicious chars
     raw_name = f.name or ''
     base = os.path.basename(raw_name)
-    base = re.sub(r"[^A-Za-z0-9._-]", "_", base) or 'upload.bin'
+    base = re.sub(r'[^A-Za-z0-9._-]', '_', base) or 'upload.bin'
     ext = base.rsplit('.', 1)[-1].lower() if '.' in base else ''
     if ext not in ALLOWED:
         return Response(
-            {"error": "unsupported_type", "allowed": sorted(ALLOWED)},
+            {'error': 'unsupported_type', 'allowed': sorted(ALLOWED)},
             status=status.HTTP_400_BAD_REQUEST,
         )
     size = getattr(f, 'size', 0)
     # Enforce hard cap
     if size and size > MAX_BYTES:
         return Response(
-            {"error": "file_too_large", "limit": MAX_BYTES},
+            {'error': 'file_too_large', 'limit': MAX_BYTES},
             status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )
 
@@ -223,24 +225,24 @@ def upload(request):
             upload.delete()
         except Exception:
             pass
-        return Response({"error": "invalid_storage_path"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'invalid_storage_path'}, status=status.HTTP_400_BAD_REQUEST)
     # Extra guard: reject symlinks outright even if they resolve under MEDIA_ROOT
     try:
         if os.path.islink(fpath):
             upload.delete()
-            return Response({"error": "invalid_storage_path"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'invalid_storage_path'}, status=status.HTTP_400_BAD_REQUEST)
     except Exception:
         pass
     # Best-effort MIME validation
     guessed, _ = mimetypes.guess_type(base)
-    if guessed and ext in { 'png', 'jpg', 'jpeg', 'pdf' }:
+    if guessed and ext in {'png', 'jpg', 'jpeg', 'pdf'}:
         if not (guessed.startswith('image/') or guessed == 'application/pdf'):
             upload.delete()
-            return Response({"error": "mismatched_content_type"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'mismatched_content_type'}, status=status.HTTP_400_BAD_REQUEST)
     # Magic-byte signature validation
-    if ext in { 'png', 'jpg', 'jpeg', 'pdf', 'docx' } and not _has_signature(fpath, ext):
+    if ext in {'png', 'jpg', 'jpeg', 'pdf', 'docx'} and not _has_signature(fpath, ext):
         upload.delete()
-        return Response({"error": "mismatched_signature"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'mismatched_signature'}, status=status.HTTP_400_BAD_REQUEST)
     # Optional virus scan hook
     try:
         cmd_tpl = getattr(settings, 'VIRUSSCAN_CMD', '')
@@ -289,14 +291,14 @@ def upload(request):
             # Exit code 0 => clean; non-zero => infected or error
             if proc.returncode != 0:
                 upload.delete()
-                return Response({"error": "infected"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'infected'}, status=status.HTTP_400_BAD_REQUEST)
     except Exception:
         # Fail-closed on scanner invocation errors
         try:
             upload.delete()
         except Exception:
             pass
-        return Response({"error": "scan_error"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'scan_error'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Best-effort OCR/parse stub
     # Only attempt text/OCR extraction for safely stored paths
@@ -306,13 +308,15 @@ def upload(request):
     else:
         upload.ocr_text = ''
     upload.save(update_fields=['ocr_text'])
-    return Response({
-        "id": upload.pk,
-        "url": f"{settings.MEDIA_URL}{upload.file.name}",
-        "content_type": upload.content_type,
-        "size": upload.size,
-        "ocr_text": upload.ocr_text[:2000],
-    })
+    return Response(
+        {
+            'id': upload.pk,
+            'url': f'{settings.MEDIA_URL}{upload.file.name}',
+            'content_type': upload.content_type,
+            'size': upload.size,
+            'ocr_text': upload.ocr_text[:2000],
+        }
+    )
 
 
 def _safe_open_for_read(path: str):
@@ -322,7 +326,7 @@ def _safe_open_for_read(path: str):
     - Uses os.open with O_NOFOLLOW and wraps with a buffered reader
     """
     if not _is_under_media_root(path):
-        raise FileNotFoundError("invalid path")
+        raise FileNotFoundError('invalid path')
     flags = os.O_RDONLY
     if hasattr(os, 'O_NOFOLLOW'):
         flags |= os.O_NOFOLLOW

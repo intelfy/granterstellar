@@ -3,15 +3,15 @@ import re
 from django.utils.deprecation import MiddlewareMixin
 from django.conf import settings
 
-_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-_INVISIBLE_RE = re.compile(r"[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]")
+_CTRL_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+_INVISIBLE_RE = re.compile(r'[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]')
 
 
 def _clean_value(v):
     if isinstance(v, str):
-        s = v.replace("\r\n", "\n").replace("\r", "\n")
-        s = _CTRL_RE.sub("", s)
-        s = _INVISIBLE_RE.sub("", s)
+        s = v.replace('\r\n', '\n').replace('\r', '\n')
+        s = _CTRL_RE.sub('', s)
+        s = _INVISIBLE_RE.sub('', s)
         return s
     if isinstance(v, list):
         return [_clean_value(x) for x in v]
@@ -27,16 +27,16 @@ class SanitizeJsonBodyMiddleware(MiddlewareMixin):
     """
 
     def process_request(self, request):
-        if request.content_type and request.content_type.startswith("application/json"):
+        if request.content_type and request.content_type.startswith('application/json'):
             try:
                 # Reading body requires buffering and reassigning
                 body = request.body
                 if not body:
                     return None
-                data = json.loads(body.decode("utf-8"))
+                data = json.loads(body.decode('utf-8'))
                 cleaned = _clean_value(data)
                 if cleaned != data:
-                    request._body = json.dumps(cleaned).encode("utf-8")
+                    request._body = json.dumps(cleaned).encode('utf-8')
             except Exception:
                 # If parsing fails, let normal handling occur
                 return None
@@ -61,11 +61,11 @@ class SecurityHeadersMiddleware(MiddlewareMixin):
             # Avoid allowing inline styles by default. If an emergency requires it, set
             # CSP_ALLOW_INLINE_STYLES=1 in the environment (not recommended).
             allow_inline = getattr(settings, 'CSP_ALLOW_INLINE_STYLES', False)
-            style_src = "style-src 'self'" + (" 'unsafe-inline'" if allow_inline else "") + (extra_style or "")
+            style_src = "style-src 'self'" + (" 'unsafe-inline'" if allow_inline else '') + (extra_style or '')
             csp = (
                 "default-src 'self'; "
                 f"script-src 'self'{extra_script}; "
-                f"{style_src}; "
+                f'{style_src}; '
                 "img-src 'self' data:; "
                 "font-src 'self' data:; "
                 # Allow only same-origin by default; extend via CSP_CONNECT_SRC allow-list

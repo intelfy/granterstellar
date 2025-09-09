@@ -30,12 +30,14 @@ class Proposal(models.Model):
     shared_with = models.JSONField(default=list, blank=True)
     archived_at = models.DateTimeField(null=True, blank=True)
     # Optional grant call URL (immutable once set). Used for template/RAG detection.
-    call_url = models.URLField(max_length=800, null=True, blank=True, help_text="Original grant call / funding opportunity URL; write-once.")
+    call_url = models.URLField(
+        max_length=800, null=True, blank=True, help_text='Original grant call / funding opportunity URL; write-once.'
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:  # pragma: no cover
-        return f"Proposal {self.pk} ({self.state})"
+        return f'Proposal {self.pk} ({self.state})'
 
     def save(self, *args, **kwargs):  # pragma: no cover - simple immutability guard
         if self.pk is not None and 'update_fields' in kwargs:
@@ -60,21 +62,22 @@ class ProposalSection(models.Model):
     backward compatibility with existing code paths; future migration can
     consolidate once all callers use ``approved_content``.
     """
+
     STATE_CHOICES = (
-        ("draft", "Draft"),
-        ("approved", "Approved"),
+        ('draft', 'Draft'),
+        ('approved', 'Approved'),
     )
-    proposal = models.ForeignKey(Proposal, on_delete=models.CASCADE, related_name="sections")
+    proposal = models.ForeignKey(Proposal, on_delete=models.CASCADE, related_name='sections')
     key = models.CharField(max_length=128, db_index=True)
-    title = models.CharField(max_length=256, blank=True, default="")
+    title = models.CharField(max_length=256, blank=True, default='')
     order = models.PositiveIntegerField(default=0)
     # Latest approved/locked text (duplicated from legacy 'content').
-    approved_content = models.TextField(blank=True, default="")
+    approved_content = models.TextField(blank=True, default='')
     # Legacy field kept for compatibility; will be synced on save() override.
-    content = models.TextField(blank=True, default="")  # deprecated alias
+    content = models.TextField(blank=True, default='')  # deprecated alias
     # In-progress AI or user draft.
-    draft_content = models.TextField(blank=True, default="")
-    state = models.CharField(max_length=16, choices=STATE_CHOICES, default="draft")
+    draft_content = models.TextField(blank=True, default='')
+    state = models.CharField(max_length=16, choices=STATE_CHOICES, default='draft')
     # Append-only log of revisions (lightweight JSON list). Each item shape:
     # {"ts": iso8601, "user_id": int|None, "from": str, "to": str, "diff": {...optional structured blocks...}}
     revisions = models.JSONField(default=list, blank=True)
@@ -84,17 +87,17 @@ class ProposalSection(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ("proposal", "key")
-        ordering = ["proposal_id", "order", "id"]
+        unique_together = ('proposal', 'key')
+        ordering = ['proposal_id', 'order', 'id']
         indexes = [
-            models.Index(fields=["proposal", "key"], name="proposal_section_key_idx"),
-            models.Index(fields=["proposal", "order"], name="proposal_section_order_idx"),
-            models.Index(fields=["proposal", "state"], name="proposal_section_state_idx"),
+            models.Index(fields=['proposal', 'key'], name='proposal_section_key_idx'),
+            models.Index(fields=['proposal', 'order'], name='proposal_section_order_idx'),
+            models.Index(fields=['proposal', 'state'], name='proposal_section_state_idx'),
         ]
 
     def __str__(self) -> str:  # pragma: no cover
         pid = getattr(self.proposal, 'id', 'unsaved')
-        return f"ProposalSection {pid}:{self.key} ({self.state})"
+        return f'ProposalSection {pid}:{self.key} ({self.state})'
 
     def save(self, *args, **kwargs):  # pragma: no cover - logic straightforward
         # Keep legacy 'content' synchronized with approved_content for now.
@@ -103,7 +106,9 @@ class ProposalSection(models.Model):
         super().save(*args, **kwargs)
 
     # --- Revision Logging -------------------------------------------------
-    def append_revision(self, *, user_id: int | None, from_text: str, to_text: str, diff: dict | None = None, change_ratio: float | None = None):
+    def append_revision(
+        self, *, user_id: int | None, from_text: str, to_text: str, diff: dict | None = None, change_ratio: float | None = None
+    ):
         """Append a revision entry to the JSON log.
 
         Each entry kept intentionally small; full diff blocks already stored with the job context.
@@ -132,43 +137,43 @@ class ProposalSection(models.Model):
 
         # Build base entry with capped text sizes.
         entry = {
-            "ts": _dt.datetime.utcnow().isoformat() + "Z",
-            "user_id": user_id,
-            "from": (from_text or "")[:15000],
-            "to": (to_text or "")[:15000],
+            'ts': _dt.datetime.utcnow().isoformat() + 'Z',
+            'user_id': user_id,
+            'from': (from_text or '')[:15000],
+            'to': (to_text or '')[:15000],
         }
 
         if change_ratio is not None:
             try:  # pragma: no cover - defensive
-                entry["change_ratio"] = round(float(change_ratio), 4)
+                entry['change_ratio'] = round(float(change_ratio), 4)
             except Exception:
                 pass
 
         # Optional structured diff blocks (already truncated in caller, but re‑guard here).
         if isinstance(diff, dict):
-            blocks = diff.get("blocks")
+            blocks = diff.get('blocks')
             if isinstance(blocks, list):
                 norm_blocks = []
                 for b in blocks[:25]:  # limit count
                     if not isinstance(b, dict):
                         continue
-                    before_val = b.get("before", "")
-                    after_val = b.get("after", "")
+                    before_val = b.get('before', '')
+                    after_val = b.get('after', '')
                     # Accept either list-of-lines or string; normalize to string then cap.
                     if isinstance(before_val, list):
-                        before_val = "\n".join(x for x in before_val if isinstance(x, str))
+                        before_val = '\n'.join(x for x in before_val if isinstance(x, str))
                     if isinstance(after_val, list):
-                        after_val = "\n".join(x for x in after_val if isinstance(x, str))
+                        after_val = '\n'.join(x for x in after_val if isinstance(x, str))
                     nb = {
-                        "type": b.get("type"),
-                        "before": str(before_val)[:1000],
-                        "after": str(after_val)[:1000],
+                        'type': b.get('type'),
+                        'before': str(before_val)[:1000],
+                        'after': str(after_val)[:1000],
                     }
-                    if "similarity" in b:
-                        nb["similarity"] = b.get("similarity")
+                    if 'similarity' in b:
+                        nb['similarity'] = b.get('similarity')
                     norm_blocks.append(nb)
                 if norm_blocks:
-                    entry["blocks"] = norm_blocks
+                    entry['blocks'] = norm_blocks
 
         # Mutate revision log with capped length (last 50 entries kept).
         revs = list(self.revisions or [])
@@ -177,6 +182,6 @@ class ProposalSection(models.Model):
             revs = revs[-50:]
         self.revisions = revs
         try:  # pragma: no cover - best effort
-            self.save(update_fields=["revisions", "updated_at"])
+            self.save(update_fields=['revisions', 'updated_at'])
         except Exception:  # Newly created instance or update_fields unsupported
             self.save()

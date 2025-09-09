@@ -30,7 +30,9 @@ class MeView(APIView):
                 'id': getattr(user, 'id', None),
                 'username': getattr(user, 'username', None),
                 'email': getattr(user, 'email', None),
-            } if user else None,
+            }
+            if user
+            else None,
         }
         return Response(data)
 
@@ -68,14 +70,16 @@ class MeView(APIView):
         except IntegrityError:
             return Response({'error': 'username_taken'}, status=400)
 
-        return Response({
-            'authenticated': True,
-            'user': {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-            },
-        })
+        return Response(
+            {
+                'authenticated': True,
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                },
+            }
+        )
 
 
 class DebugTokenObtainPairView(APIView):
@@ -95,11 +99,7 @@ class DebugTokenObtainPairView(APIView):
         if settings.DEBUG:
             user = getattr(serializer, 'user', None)
             if user is not None:
-                sub = (
-                    Subscription.objects.filter(owner_user=user)
-                    .order_by('-updated_at', '-id')
-                    .first()
-                )
+                sub = Subscription.objects.filter(owner_user=user).order_by('-updated_at', '-id').first()
                 if not sub:
                     sub = Subscription(owner_user=user)
                 sub.tier = 'pro'
@@ -111,5 +111,6 @@ class DebugTokenObtainPairView(APIView):
 
 class ThrottledTokenObtainPairView(TokenObtainPairView):
     """JWT obtain pair view with scoped throttling to deter brute-force attempts."""
+
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'login'

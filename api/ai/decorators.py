@@ -7,6 +7,7 @@ from orgs.models import Organization
 
 # NOTE: Reuses existing _rate_limit_check logic from views by importing lazily to avoid circulars.
 
+
 def ai_protected(endpoint_type: str, plan_gate: bool = True):
     """Decorator consolidating plan gating + rate limiting for AI endpoints.
 
@@ -19,15 +20,17 @@ def ai_protected(endpoint_type: str, plan_gate: bool = True):
       - When plan_gate and not free tier required, blocks free users with 402.
       - Applies single-write guard (write only) & rate limiter.
     """
+
     def decorator(view_func: Callable):
         @wraps(view_func)
         def _wrapped(request, *args, **kwargs):
             from django.core.cache import cache
+
             # Anonymous bypass in DEBUG/test-open
             if not (settings.DEBUG or getattr(settings, 'AI_TEST_OPEN', False)):
                 user = getattr(request, 'user', None)
                 if not getattr(user, 'is_authenticated', False):
-                    return Response({"error": "unauthorized"}, status=401)
+                    return Response({'error': 'unauthorized'}, status=401)
                 # Plan gating
                 if plan_gate:
                     org: Optional[Organization] = None
@@ -39,26 +42,28 @@ def ai_protected(endpoint_type: str, plan_gate: bool = True):
                             org = None
                     tier, _status = get_subscription_for_scope(user, org)
                     if tier == 'free':
-                        resp = Response({"error": "quota_exceeded", "reason": "ai_requires_pro"}, status=402)
-                        resp["X-Quota-Reason"] = "ai_requires_pro"
+                        resp = Response({'error': 'quota_exceeded', 'reason': 'ai_requires_pro'}, status=402)
+                        resp['X-Quota-Reason'] = 'ai_requires_pro'
                         return resp
             # Single-write guard (write only)
             if endpoint_type == 'write':
-                if (
-                    (settings.DEBUG or getattr(settings, 'AI_ENFORCE_RATE_LIMIT_DEBUG', False))
-                    and int(getattr(settings, 'AI_RATE_PER_MIN_PRO', 20) or 20) == 1
-                ):
+                if (settings.DEBUG or getattr(settings, 'AI_ENFORCE_RATE_LIMIT_DEBUG', False)) and int(
+                    getattr(settings, 'AI_RATE_PER_MIN_PRO', 20) or 20
+                ) == 1:
                     uid = getattr(getattr(request, 'user', None), 'id', None)
                     if uid:
-                        key_once = f"ai_dbg_single_write:{uid}"
+                        key_once = f'ai_dbg_single_write:{uid}'
                         if cache.get(key_once):
-                            return Response({"error": "rate_limited", "retry_after": 60}, status=429)
+                            return Response({'error': 'rate_limited', 'retry_after': 60}, status=429)
                         cache.set(key_once, 1, 60)
             # Rate limiter (imports helper for reuse)
             from .views import _rate_limit_check  # type: ignore
+
             rl = _rate_limit_check(request, endpoint_type)
             if rl is not None:
                 return rl
             return view_func(request, *args, **kwargs)
+
         return _wrapped
+
     return decorator

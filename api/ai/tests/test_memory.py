@@ -10,7 +10,9 @@ class AIMemoryTests(TestCase):
 
     def test_record_and_suggest_user_scope(self):
         AIMemory.record(user=self.user, org_id='', section_id='summary', key='objective', value='Improve outcomes')
-        AIMemory.record(user=self.user, org_id='', section_id='summary', key='objective', value='Improve outcomes')  # duplicate increments
+        AIMemory.record(
+            user=self.user, org_id='', section_id='summary', key='objective', value='Improve outcomes'
+        )  # duplicate increments
         items = AIMemory.suggestions(user=self.user, org_id='', section_id='summary', limit=5)
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]['key'], 'objective')

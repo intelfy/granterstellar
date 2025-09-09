@@ -73,6 +73,7 @@ class ExtraCredits(models.Model):
     """Tracks extra proposals purchased for a given month, scoped to a user or an org.
     These credits extend the monthly_cap for proposal creation.
     """
+
     owner_user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,

@@ -200,9 +200,9 @@ erDiagram
 
 - Do we allow unlocking after approval in production, or is that an admin-only escape hatch? (Currently public endpoint.) We allow editing proposals even after approval, yes, provided they have revisions left for the specific section they want to edit. If free plan users end up abusing this, we will restrict it to X edits in the future. Because proposals will still be locked to individual calls and that call's information will therefore inevitably be written into the final document (such as a proposal title stating which grant is being applied for), the potential for abuse is low.
 
-- Where to surface revision count remaining (UI contract) — serializer vs separate endpoint? Once a user is shown a section in the proposal creation flow, it would make sense to have a counter above the text field showing: "Revisions remaining for this section:" 
+- Where to surface revision count remaining (UI contract) — serializer vs separate endpoint? Once a user is shown a section in the proposal creation flow, it would make sense to have a counter above the text field showing: "Revisions remaining for this section:"
 
-- Memory model reuse: adapt AIResource snippets vs new table? (Affects ingestion complexity.) I don't know, make a rational determination. User experience is defining: User must be able to save a snippet after writing it, and recall it on similar questions in the future, unless they later decide to delete it again. Users should have a place to view all their snippets and uploaded files at a glance, but this can be deferred until post-alpha. 
+- Memory model reuse: adapt AIResource snippets vs new table? (Affects ingestion complexity.) I don't know, make a rational determination. User experience is defining: User must be able to save a snippet after writing it, and recall it on similar questions in the future, unless they later decide to delete it again. Users should have a place to view all their snippets and uploaded files at a glance, but this can be deferred until post-alpha.
 
 ## 13. Summary of Recommendations
 

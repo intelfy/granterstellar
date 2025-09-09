@@ -2,6 +2,7 @@
 
 Encapsulates reading/updating ProposalSection records during write/revise cycles.
 """
+
 from __future__ import annotations
 from django.db import transaction
 from proposals.models import ProposalSection
@@ -21,7 +22,7 @@ def save_write_result(section: ProposalSection, draft_text: str):
     copy draft_content -> content.
     """
     section.draft_content = draft_text
-    section.save(update_fields=["draft_content", "updated_at"])
+    section.save(update_fields=['draft_content', 'updated_at'])
 
 
 def apply_revision(section: ProposalSection, revised_text: str, promote: bool = False):
@@ -33,17 +34,17 @@ def apply_revision(section: ProposalSection, revised_text: str, promote: bool = 
     section.draft_content = revised_text
     if promote:
         section.content = revised_text
-        section.save(update_fields=["draft_content", "content", "updated_at"])
+        section.save(update_fields=['draft_content', 'content', 'updated_at'])
     else:
-        section.save(update_fields=["draft_content", "updated_at"])
+        section.save(update_fields=['draft_content', 'updated_at'])
 
 
 @transaction.atomic
-def upsert_section(proposal_id: int, key: str, title: str = "") -> ProposalSection:
+def upsert_section(proposal_id: int, key: str, title: str = '') -> ProposalSection:
     section, _created = ProposalSection.objects.get_or_create(
         proposal_id=proposal_id,
         key=key,
-        defaults={"title": title, "order": 0},
+        defaults={'title': title, 'order': 0},
     )
     return section
 
@@ -55,4 +56,4 @@ def promote_section(section: ProposalSection):
     """
     section.content = section.draft_content
     section.locked = True
-    section.save(update_fields=["content", "locked", "updated_at"])
+    section.save(update_fields=['content', 'locked', 'updated_at'])
