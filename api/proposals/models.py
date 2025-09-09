@@ -105,15 +105,37 @@ class ProposalSection(models.Model):
             self.content = self.approved_content
         super().save(*args, **kwargs)
 
+    def get_remaining_revision_slots(self) -> int:
+        """Return the number of revision slots remaining for this section."""
+        from django.conf import settings
+        
+        try:
+            cap_raw = getattr(settings, 'AI_SECTION_REVISION_CAP', 5)
+            revision_cap = int(cap_raw) if cap_raw not in (None, '') else 5
+            if revision_cap <= 0:
+                revision_cap = 5
+        except Exception:
+            revision_cap = 5
+            
+        existing_count = len(self.revisions or [])
+        return max(revision_cap - existing_count, 0)
+        
+    def can_revise(self) -> bool:
+        """Return True if this section can accept more revisions."""
+        return self.get_remaining_revision_slots() > 0
+
     # --- Revision Logging -------------------------------------------------
     def append_revision(
-        self, *, user_id: int | None, from_text: str, to_text: str, diff: dict | None = None, change_ratio: float | None = None
+        self, *, user_id: int | None, from_text: str, to_text: str, diff: dict | None = None, change_ratio: float | None = None, raise_on_cap: bool = False
     ):
         """Append a revision entry to the JSON log.
 
         Each entry kept intentionally small; full diff blocks already stored with the job context.
         Shape: {"ts", "user_id", "from", "to", "change_ratio", "blocks"?}
         We only persist blocks if provided AND total serialized length is reasonably small (<30k) to avoid bloat.
+        
+        Args:
+            raise_on_cap: If True, raises ValidationError when cap is reached instead of silently ignoring
         """
         import datetime as _dt
         from django.conf import settings as _settings  # local import to avoid at-import dependency churn
@@ -125,7 +147,7 @@ class ProposalSection(models.Model):
         # the method idempotent for callers that don't handle exceptions while
         # still enforcing an upper bound. Returning early avoids unnecessary DB writes.
         try:
-            _cap_raw = getattr(_settings, 'PROPOSAL_SECTION_REVISION_CAP', 5)
+            _cap_raw = getattr(_settings, 'AI_SECTION_REVISION_CAP', 5)
             revision_cap = int(_cap_raw) if _cap_raw not in (None, '') else 5
             if revision_cap <= 0:
                 revision_cap = 5  # sanity fallback
@@ -133,6 +155,13 @@ class ProposalSection(models.Model):
             revision_cap = 5
         existing = list(self.revisions or [])
         if len(existing) >= revision_cap:
+            if raise_on_cap:
+                from django.core.exceptions import ValidationError
+                raise ValidationError(
+                    f'Revision cap of {revision_cap} reached for section {self.key}. '
+                    f'No more revisions allowed.',
+                    code='revision_cap_exceeded'
+                )
             return  # silently ignore beyond-cap attempts
 
         # Build base entry with capped text sizes.

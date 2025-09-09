@@ -64,7 +64,7 @@ class ProposalSerializer(serializers.ModelSerializer):
             from django.conf import settings as _settings
 
             try:
-                _cap_raw = getattr(_settings, 'PROPOSAL_SECTION_REVISION_CAP', 5)
+                _cap_raw = getattr(_settings, 'AI_SECTION_REVISION_CAP', 5)
                 revision_cap = int(_cap_raw) if _cap_raw not in (None, '') else 5
                 if revision_cap <= 0:
                     revision_cap = 5

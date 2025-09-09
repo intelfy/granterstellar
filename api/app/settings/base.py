@@ -159,6 +159,10 @@ if not DEBUG:
         raise RuntimeError('SECURITY: ALLOWED_HOSTS cannot include * in production')
     if CORS_ALLOW_ALL_ORIGINS:
         raise RuntimeError('SECURITY: CORS_ALLOW_ALL must be 0 in production')
+    if not os.getenv('JWT_SIGNING_KEY'):
+        raise RuntimeError('SECURITY: JWT_SIGNING_KEY must be set and distinct from SECRET_KEY in production')
+    if os.getenv('JWT_SIGNING_KEY') == SECRET_KEY:
+        raise RuntimeError('SECURITY: JWT_SIGNING_KEY must be different from SECRET_KEY for key rotation strategy')
 
 QUOTA_FREE_ACTIVE_CAP = int(os.getenv('QUOTA_FREE_ACTIVE_CAP', '1'))
 QUOTA_PRO_MONTHLY_CAP = int(os.getenv('QUOTA_PRO_MONTHLY_CAP', '20'))
@@ -191,6 +195,10 @@ CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', '0') == '1'
 
 EXPORTS_ASYNC = os.getenv('EXPORTS_ASYNC', '0') == '1'
 AI_ASYNC = os.getenv('AI_ASYNC', '0') == '1'
+
+# AI Security Settings
+AI_PROMPT_SHIELD_ENABLED = os.getenv('AI_PROMPT_SHIELD_ENABLED', '1') == '1'
+AI_SECTION_REVISION_CAP = int(os.getenv('AI_SECTION_REVISION_CAP', '5'))
 
 INVITE_SENDER_DOMAIN = os.getenv('INVITE_SENDER_DOMAIN', '').strip()
 DEFAULT_FROM_EMAIL = (
