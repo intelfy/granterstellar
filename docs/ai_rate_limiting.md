@@ -13,13 +13,13 @@ This document describes how AI feature access is gated and rate limited.
 
 | Layer | Purpose | Applies To | Env / Setting |
 |-------|---------|-----------|---------------|
-| Plan Gating | Block AI endpoints for Free tier (except when DEBUG / test bypass) | write / revise / format / plan* | Subscription tier via `billing.quota.get_subscription_for_scope` |
+| Plan Gating | Block write/revise/format for Free tier (planner allowed to demonstrate value unless gated later) | write / revise / format | Subscription tier via `billing.quota.get_subscription_for_scope` |
 | Per‑Minute Rate Limit | Cap requests per user per endpoint type (tier dependent) | write / revise / format / plan | `AI_RATE_PER_MIN_FREE`, `AI_RATE_PER_MIN_PRO`, `AI_RATE_PER_MIN_ENTERPRISE` |
 | Debug Single‑Write Guard | Deterministic test guard to ensure second write gets 429 when limit=1 | write (sync + async paths) | `AI_ENFORCE_RATE_LIMIT_DEBUG=1` with `AI_RATE_PER_MIN_PRO=1` and `DEBUG=1` |
 | Async Job Path | Offload long model calls to Celery if enabled | all endpoints | `AI_ASYNC=1` + valid `CELERY_BROKER_URL` |
 | Anonymous/Test Bypass | Allow unauthenticated calls in local debug & explicit test mode | all endpoints | `DEBUG=1` or `AI_TEST_OPEN=1` |
 
-*`plan` endpoint is informational and may later receive plan-based gating if cost increases.
+*`plan` endpoint currently allowed for Free tier to surface structured preview; may be gated if cost profile changes.
 
 ## Environment Variables
 
@@ -158,6 +158,7 @@ Symptoms & Actions:
 - Surface `X-Rate-Limit-Remaining` in successful responses.
 - Org-scope rate budgeting (shared pool).
 - Burst + token bucket algorithm for smoother traffic.
+- Circuit breaker + provider fallback integration (failure-based open state shared across endpoints).
 - Admin override header (audited) for emergency writes.
 
 Maintain this doc when modifying `api/ai/views.py` or rate-limiting behavior.

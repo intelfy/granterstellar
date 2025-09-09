@@ -5,6 +5,7 @@ from django.conf import settings
 from .sanitize import sanitize_text, sanitize_url, sanitize_answers, sanitize_file_refs
 import time
 from .models import AIJob
+from .section_materializer import materialize_sections
 from .tasks import run_plan, run_write, run_revise, run_format
 from .provider import get_provider
 from django.db.models import QuerySet
@@ -14,6 +15,7 @@ from billing.quota import get_subscription_for_scope
 from django.utils import timezone
 from .decorators import ai_protected
 from django.db import models
+from app.common.keys import t
 
 
 class DebugOrAuthPermission(BasePermission):
@@ -205,15 +207,33 @@ def plan(request):
         return Response({"job_id": job.id, "status": job.status})  # type: ignore[attr-defined]
     provider = get_provider(getattr(settings, 'AI_PROVIDER', None))
     t0 = time.time()
-    plan = provider.plan(grant_url=grant_url or None, text_spec=text_spec or None)
+    plan_result = provider.plan(grant_url=grant_url or None, text_spec=text_spec or None)
     dt_ms = int((time.time() - t0) * 1000)
     from .models import AIMetric
+    # Extract blueprint for materialization.
+    # Planner contract: plan_result may be a dict containing 'sections' or 'blueprint' list,
+    # or the planner could evolve to return a plain list directly.
+    blueprint = []
+    proposal_id_val = None
+    if isinstance(plan_result, dict):
+        if isinstance(plan_result.get("sections"), list):
+            blueprint = plan_result.get("sections")  # type: ignore[assignment]
+        elif isinstance(plan_result.get("blueprint"), list):
+            blueprint = plan_result.get("blueprint")  # type: ignore[assignment]
+        proposal_id_val = plan_result.get("proposal_id")
+    created_sections: list[str] = []
+    if proposal_id_val and blueprint:
+        try:
+            mat = materialize_sections(proposal_id=int(proposal_id_val), blueprint=blueprint)
+            created_sections = [s.key for (s, c) in mat if c]
+        except Exception as e:  # pragma: no cover
+            created_sections = ["error:" + str(e)]
     AIMetric.objects.create(
-        type='plan', model_id='n/a', duration_ms=dt_ms, tokens_used=0,
+        type='plan', model_id='planner.v1', duration_ms=dt_ms, tokens_used=0,
         created_by=(getattr(request, 'user', None) if request.user.is_authenticated else None),
         org_id=request.META.get('HTTP_X_ORG_ID', ''), success=True,
     )
-    return Response(plan)
+    return Response({"plan": plan_result, "created_sections": created_sections})
 
 
 @api_view(["POST"])
@@ -343,6 +363,38 @@ def revise(request):
         run_revise.delay(job.id)  # type: ignore[attr-defined]
         return Response({"job_id": job.id, "status": job.status})  # type: ignore[attr-defined]
     provider = get_provider(getattr(settings, 'AI_PROVIDER', None))
+    # --- Revision cap pre-check (sync path only; async handled in task) ---
+    if section_id:
+        try:
+            from proposals.models import ProposalSection as _PS  # local import
+            sec_obj = _PS.objects.filter(id=section_id).only('id', 'revisions').first()
+            if sec_obj is not None:
+                cap_raw = getattr(settings, 'PROPOSAL_SECTION_REVISION_CAP', 5)
+                try:
+                    cap_val = int(cap_raw) if cap_raw not in (None, '') else 5
+                except Exception:
+                    cap_val = 5
+                if cap_val <= 0:
+                    cap_val = 5
+                current_count = len(sec_obj.revisions or [])
+                if current_count >= cap_val:
+                    from .models import AIMetric
+                    try:  # metric (failure)
+                        AIMetric.objects.create(
+                            type='revise', model_id='revision_cap_blocked', duration_ms=0, tokens_used=0,
+                            success=False, created_by=(request.user if request.user.is_authenticated else None),
+                            org_id=request.META.get('HTTP_X_ORG_ID', ''), section_id=section_id,
+                            error_text='revision_cap_reached',
+                        )
+                    except Exception:
+                        pass
+                    return Response({
+                        "error": "revision_cap_reached",
+                        "message": t("errors.revision.cap_reached", count=current_count, limit=cap_val),
+                        "remaining_revision_slots": 0,
+                    }, status=409)
+        except Exception:
+            pass  # fall through on errors
     t0 = time.time()
     # (Memory suggestions reserved hook: intentionally skipped until provider contract extended)
     # Include memory context as additional signal appended to change_request (non-persistent)

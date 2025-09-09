@@ -6,11 +6,83 @@ PURPOSE: ['Outline current priorities', 'Detail next steps', 'Track remaining is
 PRIORITY: 'CRITICAL'
 [[/AI_CONFIG]]
 
-# Granterstellar — Engineering Plan (updated 2025-09-08)
+# Granterstellar — Engineering Plan (updated 2025-09-09)
 
 Source of truth for product/architecture: `.github/copilot-instructions.md` and `docs/README.md` (install/security/ops details in `docs/*`). This file tracks current priorities and gaps only.
 
 Legend: [ ] todo, [~] in progress, [x] done
+
+## Assumptions & Constraints (Alpha Focus)
+
+Scope assumptions for the immediate Alpha Critical Path. Adjust here before coding if any change in product direction.
+
+### Section Workflow
+
+- A proposal is composed of an ordered list of sections (already implemented as `ProposalSection` with fields: `key` (slug), `order`, `state=draft|approved`, `draft_content`, `approved_content`, `revisions[]`, `locked`). Legacy `Proposal.content` mirrors approved content and will be deprecated after serializer pivot.
+- Quota increments only on NEW proposal creation (not per section). Free tier: 1 lifetime proposal (deleting does NOT restore quota). Paid tiers: monthly new proposal cap (plan‑dependent). No active cap for paid tiers. Unlimited edits after creation (subject to rate limiting) but call URL immutable.
+- Structure (section headers + order) is planned exactly once by the planner. Optional: a single "structure preview" step where user can request ONE revision (future enhancement; out of immediate scope). After lock, structure cannot change.
+- Each section can be revised up to 5 times (diff revisions) regardless of overall proposal approval/export status; sections remain individually editable forever within the revision cap. (Current backend truncates at 50; explicit 5‑cap enforcement pending.)
+- Revisions store structured diffs (target cap: 5 per section, 25 blocks each) plus revised snapshot; truncation logic reused from existing `append_revision` (currently allows up to 50 historical entries until enforcement lands).
+- Migration: existing `Proposal.content` → single section `main` (order=1, state=approved if non-empty else draft) to preserve legacy content; ensures subsequent per‑section editing path.
+- Approve action idempotent; duplicate approves are no‑ops.
+- Unlock after approval permitted (user may continue revisions if quota remaining); promotion sets `state=approved` and `locked=True`; unlock path subject to future tightening if abuse observed.
+- Section deletion / reordering not supported in alpha (avoids quota/accounting & diff complexity). Creating a new proposal is required for different structure.
+- After proposal export, sections and metadata remain available for further AI-assisted revisions (within 5‑revision cap).
+
+### Dynamic Question Generation & Planner Retrieval Flow
+
+- Sources (priority order): 1) Grant-specific template(s) from RAG (matched via immutable `call_url` / grant identifier), 2) Grant-specific or closely similar sample winning proposals from RAG, 3) Agentic web search (to acquire missing templates/samples and immediately ingest), 4) Universal baseline grant template (only if RAG + search produce nothing), 5) Org metadata gaps (ask user to supply missing basics like mission if absent).
+- Questions derive from required sections: if a section "Statement of Need" exists, at least one question targets that content explicitly.
+- Types limited to plain free‑text or file uploads (no selects, ratings, etc.).
+- Ordering: sections ordered as in highest quality template/sample (PDF order). Questions grouped under their section, preserving section order; within a section order by template priority then stable key.
+- Planner runs exactly once; no re-planning. (Optional single preview revision deferred.) During first run it triggers asynchronous ingestion (embedding) of any newly discovered templates/samples so later writes/revisions benefit from retrieval.
+- Fallback web search: if RAG empty for both template & sample queries, launch web search agent; any found assets are stored (raw original + extracted structured section outlines) and embedding tasks queued. If still none, use universal template (deterministic) and set `fallback_mode=true`.
+- Audit: hash of ordered question keys + section slugs stored to detect drift.
+
+### Memory Scoring & Injection
+
+- Memory relevance: no temporal decay; score = `usage_count` only. User/org snippets & uploaded file summaries assumed persistently relevant until user deletes them.
+- Top K=5 by score (ties: deterministic sort by id). Min score threshold 1 (remove prior 0.15 fractional heuristic) to eliminate nearly unused noise.
+- Each memory item truncated to ~400 chars (hard cap) pre-provider.
+- Injection: dedicated contextual block; providers must not echo memory back into persistent memory store to avoid duplication.
+- If zero qualifying memories, omit block entirely.
+
+### Provider Fallback & Circuit Breaker
+
+- Timeouts: 25s write/format, 15s revise/plan (align with expected longer formatting latency). Deterministic deadlines support stable UX messaging.
+- Retry: one immediate retry on timeout/5xx (validation or schema errors do not retry) then fallback provider invocation.
+- Circuit: open after 5 qualifying failures within 120s; stay open 180s; half‑open allows 1 probe to close.
+- Secondary provider must satisfy identical schema contract; double failure emits `AI_TEMPORARY_UNAVAILABLE` and logs failure taxonomy.
+
+### Prompt Safety / Injection Shield
+
+- Inputs scanned (case-insensitive) for directives altering model role/safety, e.g., /(ignore (previous|earlier) (instructions|rules)|system:|you are now)/.
+- Redacts or rejects: If high-risk pattern found → reject with 422; low-risk (embedded inside sentence) → wrap with neutralizing comment token and proceed.
+- Shield runs before persistence & quota checks to avoid counting rejected attempts.
+
+### Quota & Metrics
+
+- Quota: tracked per new proposal (free: 1 lifetime; paid: monthly cap resets). Section approvals, revisions, formatting do NOT consume additional quota units.
+- No token-based enforcement yet (intentionally deferred); we still LOG prompt_tokens, completion_tokens for instrumentation and later pricing calibration.
+- Metrics captured: retrieval_ms, embedding_ms (planner/writer phases), memory_count, fallback_mode flag (to be stored), question_hash, section_structure_hash (hash fields pending task).
+- Future (deferred): anomaly detection on unusually large token bursts.
+
+### Non-Goals (Alpha)
+
+- No multi-user real-time collaboration or locking semantics.
+- No i18n extraction (deferred; minimal English copy only).
+- No semantic rerank or streaming output yet (flagged low priority backlog).
+- No section deletion or re-order UI (initial order fixed after creation; future migration handles reordering if needed).
+
+### Risks & Mitigations (Summary)
+
+- Data migration risk (legacy proposals): idempotent command + dry run; abort if proposal already has sections.
+- Circuit false positives: count only timeout/5xx/provider transport failures (exclude validation); expose counters in admin.
+- Memory drift: stable ordering + hash of injected memory IDs; test asserts unchanged across runs.
+- Web search fallback unreliability: capture fallback_mode metric; provide deterministic universal template to avoid blocking flow.
+- Revision cap exhaustion (5) user frustration: alert early (UI shows remaining revisions) to reduce surprise.
+
+// Edit above if product direction changes; keep lean—avoid duplicating full design docs.
 
 ## Status snapshot
 
@@ -24,501 +96,164 @@ Legend: [ ] todo, [~] in progress, [x] done
 Focused list of backend items required for a reliable, end-to-end AI-assisted proposal flow for early alpha. (H)=High / must-have for alpha, (R)=Recommended pre-public, (M)=Monitoring/maintainability.
 
 1. (H) Dynamic Question Generation – Planner auto-populates section questions from template banks + org metadata gap analysis; deterministic fallback when retrieval empty.
-2. (H) Section Workflow Model – Introduce `ProposalSection` (draft/approved, revisions log); migrate existing proposal `content` to sections to enable iterative write→revise→approve and per‑section quotas.
-3. (H) Revision Diff Engine – Semantic/paragraph diff (rapidfuzz) yielding structured added/removed/changed blocks powering revise cycle UI & validation.
-4. (H) Quota Binding to AI Usage – Enforce plan/section caps before enqueue; increment on first approval; map token accounting to sections.
-5. (H) Prompt Safety / Injection Shield – Pre-flight scan & neutralization of disallowed directives in user answers/memory; abort unsafe jobs.
-6. (H) Provider Fallback & Circuit Breaker – Automatic secondary model fallback + failure counters; open circuit after threshold to preserve availability.
-7. (H) Memory Injection Upgrade – Replace underscore hack with structured memory field + scoring (usage_count * recency decay) & token truncation.
-8. (R) Token & Phase Metrics – Capture retrieval_ms, embedding_ms, prompt/completion tokens, memory_count for tuning + accurate quota reconciliation.
-9. (H) E2E Alpha Test Suite – Simulated user path (grant call URL → plan → Q&A loop → revise → approve → format → export) asserting prompt versions, snippet refs, deterministic outputs.
-10. (R) Documentation (`docs/ai_prompts.md`) – Role contracts, variable semantics, safety policy, audit fields.
-
-Note: Items already completed (Prompt Template System, Prompt Contracts, PII Redaction, Context Budget Manager, Memory Model) are excluded from this list but remain documented below.
 
-## Condensed MVP Release Prep Checklist
-
-App correctness
+# Granterstellar — Focused Task List (updated 2025-09-09)
 
-- [ ] All migrations applied cleanly on fresh Postgres (no squashed drift)
-- [ ] RLS matrix tests green against production-like Postgres role
-- [ ] Core flows manual pass: signup/org create → proposal AI write/revise/format → export PDF → billing checkout/portal → usage reflects subscription/quotas
-
-Security & config
-
-- [ ] `env_doctor --strict` passes with production env file
-- [ ] SECRET_KEY & JWT_SIGNING_KEY distinct; ALLOWED_HOSTS no wildcard
-- [ ] CORS_ALLOW_ALL=0; CSP allow-lists minimal; no inline styles (unless temporary override)
-- [ ] Stripe webhook event processed successfully in staging
-
-Performance & build
-
-- [ ] Web build: no source maps, no console/debugger, bundle within provisional budget
-- [ ] API image built with STRIP_PY=1 (optional) and starts with DEBUG=0
-- [ ] Health endpoints return 200 behind Traefik (GET /healthz, /api/healthz)
-
-Data durability
-
-- [ ] Media volume backup script runs & retains expected days
-- [ ] Postgres backup/restore smoke tested
-
-Observability & ops
-
-- [ ] Subscription enforcement cron scheduled (enforce_subscription_periods)
-- [ ] Orphaned media audit run (expect low count)
-- [ ] Error logs free of noisy repetitive stack traces
-
-Docs & handoff
-
-- [ ] Deployment guide reflects final env values
-- [ ] Docs index updated (legacy artifacts summarized)
-- [ ] CHANGELOG entry for release prepared
-
-Go / No-Go
-
-- [ ] Manual export integrity check (same proposal → identical PDF hash)
-- [ ] AI deterministic formatting verified (marker present)
-
-## Current priorities (August–September 2025)
-
-### 1. Stripe promotions live-mode E2E
-
-- [~] Verify coupons/promo codes in staging/prod (signed webhooks) and ensure `/api/usage` reflects active discounts end-to-end.
-
-### 2. RLS coverage and DB hardening
-
-- [x] Expanded Postgres-only matrix (creator/admin/member/anon + usage endpoint) — new `db_policies/tests/test_rls_usage_endpoint.py` covers `/api/usage` HTTP-level RLS. Least-privileged DB user + migration ownership guidance documented in `docs/rls_postgres.md` (sections: "Least-privileged DB user" and "Least Privilege & Migration Ownership").
-
-### 3. Ops and monitoring
-
-- [x] Minimal liveness `/api/health` and readiness `/api/ready` endpoints added; runbook & README updated.
-- [~] Re-run dependency/SAST scans and capture deltas (infrastructure & automation added; pending: formal triage doc + suppressions rationale if needed).
-
-## 4. AI providers
-
-- [~] Safety filters (implemented: per-minute rpm, daily request cap, monthly token cap; tests in `ai/tests/test_ai_caps.py`; deployment guide updated with env vars; pending: deterministic sampling toggle + provider timeout/retry + prompt shield + pre-execution token projection to block before provider call). New env vars:
-  - AI_RATE_PER_MIN_FREE / AI_RATE_PER_MIN_PRO / AI_RATE_PER_MIN_ENTERPRISE
-  - AI_DAILY_REQUEST_CAP_FREE / AI_DAILY_REQUEST_CAP_PRO / AI_DAILY_REQUEST_CAP_ENTERPRISE
-  - AI_MONTHLY_TOKENS_CAP_PRO / AI_MONTHLY_TOKENS_CAP_ENTERPRISE
-  - AI_ENFORCE_RATE_LIMIT_DEBUG=1 (enforce in DEBUG for local testing)
-  Response headers on 429: Retry-After, X-AI-Daily-(Cap|Used), X-AI-Monthly-Token-(Cap|Used) as applicable.
-- [~] Deterministic sampling toggle for export-critical runs (env: `AI_DETERMINISTIC_SAMPLING`, default True; affects `/api/ai/format` deterministic flag). Pending: extend to write/revise variance controls if needed.
-- [ ] RAG store (templates/samples); curate initial self-hosted set
-- [ ] Prepare batch task & prompts for Gemini-2.5-Flash to twice a week search web for templates and successful/winning proposal samples for common grant calls we don't currently have templates for and integrate them into the RAG. Files should be categorized as either samples or templates. Log all new files added.
-- [ ] Implement AI/user interaction flow: The user provides the open call they're applying for --> The planner (using web search to review the user's input URL for the open call and compares against templates/samples in the RAG) determines what sections will be needed and what information should be prefilled (drawing also from the organization metadata like name/description) and what questions to ask the user per section --> The writer parses the user's answers per section and fleshes out the section for review/revision until user approves --> the user is asked the next set of questions for the next section --> the writer repeats --> ... --> once all pre-planned sections are done, the user approves the text a final time, before the formatter structures it (prioritizing a good looking PDF formatting) according to a template (if one exists) or inference and similar sample writing and web search grounding (if a template does not exist) --> Formatter presents a mockup of the final .PDF versio of the file, formatted to closely resemble the templates/samples in layout --> The user exports the formatted file in their chosen extension, (or opens the editor and is asked which section they would like to edit, and whether they would like to edit the raw text manually or rerun the AI interactions for that section)
-  
-### NEW: Alpha-Critical Gaps (must complete before end-to-end testable AI flow)
-
-These clarify that USERS NEVER SUPPLY PROMPTS DIRECTLY — backend owns role-specific prompt engineering.
-
-- [x] Prompt Template System (High) — Implemented via `AIPromptTemplate` (name, version, variables, checksum auto-recomputed). Snapshots stored on `AIJobContext` (`rendered_prompt_redacted`, `prompt_version`, `template_sha256`).  
-- [x] Role-Specific Prompt Contracts (High) — Defined & enforced. Validators in `ai/validators.py`; integrated in `gpt5.py` & `gemini.py` (planner/write/revise/format). Writer rejects JSON-shaped drafts; reviser returns stub diff structure (to be replaced by semantic diff); formatter enforces `formatted_markdown` key. Follow-ups listed below.
-- [x] AIJobContext / Prompt Audit (High) — Implemented: fields present (`template_sha256`, `redaction_map`, `model_params`, `snippet_ids`, `retrieval_metrics`). Deterministic redaction taxonomy + mapping persisted.  
-  - [x] RAG Data Models (High) — `AIResource` & `AIChunk` + migrations + admin registration. See `docs/rag_ingestion.md`.  
-  - [x] Embedding Service (High) — Deterministic hash backend placeholder; `health()` implemented. Follow-up (MiniLM + vector index) tracked in doc roadmap.  
-  - [x] Chunking & Ingestion Pipeline (High, phase 1) — Text chunking, sha256 exact dedupe, similarity dedupe (first-chunk embedding + prefix heuristic + adaptive threshold) implemented. URL fetch + Celery ingestion + manifest expansion deferred.  
-  - [x] Retrieval Integration (High, phase 1) — Deterministic ordering (score desc then id) + token budget trimming; planner/writer consuming. Future semantic template match + dynamic budget reservation pending.  
-- [ ] Dynamic Question Generation (High) — Planner populates `questions` per section using retrieved template question banks + gap analysis of org metadata vs template required fields. Provide deterministic fallback set when retrieval empty.  
-- [ ] Memory Injection Upgrade (High) — Replace underscore hack with explicit memory field in writer/reviser prompt assembly; add scoring (usage_count + recency decay) and token truncation.  
-- [ ] Section Workflow Model (High) — Add `ProposalSection` model (proposal_fk, section_id, state=draft|approved, draft_text, approved_text, revisions JSON (list), updated_at). Migrate existing proposal `content` into sections mapping.  
-- [ ] Revision Diff Engine (High) — Implement paragraph/semantic diff (rapidfuzz) returning JSON blocks with change types; integrate into revise task (replace "stub").  
-- [ ] Quota Binding to AI Usage (High) — Map each approved section (first approval) to proposal usage increment; enforce cap before enqueue write/revise if section already approved (unless revision). Track token usage per section in metrics.  
-- [ ] Token & Phase Metrics (High) — Extend `AIMetric` or new `AIPhaseMetric` to capture retrieval_ms, embedding_ms, prompt_tokens, completion_tokens, snippet_count, memory_count.  
-- [ ] Provider Fallback & Circuit Breaker (High) — Wrap calls: on model failure/timeouts escalate to secondary provider; maintain failure counters; open circuit after threshold.  
-- [ ] Prompt Safety / Injection Shield (High) — Pre-flight scan of user answers & memory for disallowed directives (regex list) + neutralization; log events; abort with safe error.  
-- [x] PII Redaction Layer (High) — Deterministic category tokens `[CATEGORY_hash]` (EMAIL, NUMBER, PHONE, ID_CODE, SIMPLE_NAME, ADDRESS_LINE) with persisted `redaction_map`. Follow-ups: monitoring metrics, admin review UI.  
-- [x] Context Budget Manager (High) — Implemented `ai/context_budget.py` providing deterministic trimming for retrieval, memory, file refs (currently retrieval/memory integration pending planner refactor). Follow-ups: semantic template match, dynamic reservation %, retrieval caching.  
-- [ ] Retrieval Caching (Medium) — Cache (grant_call_hash, section_id) → snippet IDs for TTL 24h to reduce re-embedding cost; bust on new resource ingestion.  
-- [ ] Scheduled RAG Refresh (Medium) — Celery beat: 2x weekly run ingestion tasks for new public grant calls list; summary log with counts (added, duplicates, failed).  
-- [ ] Re-Embed Drift Task (Medium) — If embedding model version changes, queue re-embed for all resources (batch throttled).  
-- [ ] Cleanup & TTL (Medium) — Purge AIJob + AIJobContext older than 30 days; archive metrics.  
-- [ ] E2E Alpha Test Suite (High) — New test path: simulate user providing only URL → expect full section question plan → iterative answer & write cycle → revise → approve → format → export PDF stub. Includes assertions for prompt_version and retrieval snippet references.  
-- [ ] Documentation: Add `docs/ai_prompts.md` describing role contracts, variable semantics, safety policy; warn that direct user prompt injection is unsupported.  
-
-- [ ] (Follow-up) Semantic Rerank (Low) — Cross-encoder rerank top 30 retrieval, keep best 6.
-- [ ] (Follow-up) Streaming Writer (Low) — SSE endpoint streaming partial drafts (gated by provider support).
-
-- [ ] Test: planner schema validation rejects malformed provider JSON.
-- [ ] Test: writer rejects output containing JSON or non-markdown gating markers.
-  - [ ] Test: reviser missing diff keys raises SchemaError.
-  - [ ] Test: formatter missing formatted_markdown raises SchemaError.
-  - [ ] Test: composite provider propagates SchemaError without masking.
-- [ ] Test: diff engine returns added/removed counts > 0 when change_request supplied.
-- [ ] Test: quota denial when cap reached before new section write.
-- [ ] Test: prompt audit row created & redacted fields masked.
-- [ ] Test: injection shield blocks disallowed directive phrase.
-- [ ] Test: retrieval fallback path (no snippets) still plans sections.
-- [ ] Test: memory scoring excludes aged low-usage items after threshold.
-
-- [x] Implement AI memory per user/org (model `AIMemory` + suggestions endpoint `/api/ai/memory/suggestions`) with automatic capture on write/revise and integration into provider prompt context.
-  - Storage: Idempotent dedup via `(created_by, org_id, key_hash, value_hash)` uniqueness; per‑scope retrieval with strict isolation (org memories excluded from personal unless `X-Org-ID` header supplied).
-  - Prompt integration (2025-09-08): `write` injects top (limit 3) suggestions under reserved answer key `_memory_context` as a `[context:memory]` block; `revise` appends `[context:memory]` block to `change_request`. Underscore key prevents recursive persistence.
-  - Frontend: Hook `useAIMemorySuggestions` + `MemorySuggestions` component already surfaced in AuthorPanel (chips → click to insert); tests in `ai-memory-suggestions.test.jsx` (section filter, org filter, limit, empty token, refresh) all passing.
-  - Tests: Added `test_memory_prompting.py` (write/revise inclusion + absence when none). AI test suite now 37 tests green (was 34). Web suite 18 files / 30 tests green.
-  - Observability: Future enhancement could expose whether memory context applied via response metadata header (deferred).
-  - NOTE (flake observed once pre-final code): A single transient failure of `test_org_scope_isolated_from_personal` (org memory leaked to personal) during an earlier run before final code reload; not reproducible after latest changes. Added follow-up backlog item to monitor.
-  - Follow-up (backlog): configurable token truncation (currently value[:400]), per-key weighting, and provider contract evolution to accept structured memory context separately from answers.
-
-### 5. Performance & optimization (pre-deploy)
-
-- Web build (Vite)
-  - [~] Ensure production build has: sourcemap=false, minify on, CSS minify, hashed filenames, asset inlining threshold sensible
-  - [x] Drop console/debugger in prod build (keep aligned with CI invariants); verify via CI grep against `web/dist`
-  - [x] Route-level code splitting: React.lazy for heavy views (dashboard/proposals/orgs, account, billing) implemented; further tuning pending
-  - [x] Vendor chunking and stable manualChunks to maximize browser cache reuse
-  - [ ] Preload critical above-the-fold chunks; lazy-load secondary panels (OCR, metrics)
-  - [ ] Analyze bundle (rollup-plugin-visualizer) and cap main bundle size; document deltas
-  - Baseline (2025-09-01 local): total gzipped JS ≈ 59.8 KB; largest chunk vendor-react ≈ 43.7 KB gzip. Analyzer report at web/dist/stats.html. CI guard wired via scripts/sizeguard.mjs with budget 600 KB (soft; tighten later to ~180–250 KB as features stabilize).
-
-- Runtime (client)
-  - [ ] Coalesce and debounce autosaves/searches; cap concurrency for background fetches; exponential backoff on retry
-  - [ ] In-memory cache for GETs (SWR-style) on stable resources: `/api/usage`, `/api/orgs/*`, proposal lists
-  - [ ] Avoid long lists re-rendering; memoize selectors; virtualize if >100 rows
-  - [ ] Remove unnecessary history.replaceState usage; prefer router navigation (already started)
-
-- API efficiency
-  - [ ] Ensure list endpoints are paginated and indexed (confirm `select_related/prefetch_related` on proposals/orgs)
-  - [ ] Add/verify gzip/br compression and ETag/Last-Modified for cacheable GETs
-  - [x] Cache lightweight, per-user/org GETs (e.g., `/api/usage`) briefly in Redis with RLS-aware keys (user+org)
-  - [ ] Batch endpoints where reasonable (e.g., combined bootstrap: account, orgs, usage)
-
-- Infra/delivery
-  - [ ] Serve `web/dist` via Coolify/Traefik with gzip+br; long-lived immutable cache headers on hashed assets
-  - [ ] Optional CDN in front of static if needed; document invalidation strategy
-
-- Guardrails & SLOs
-  - [x] Add CI check: build SPA and assert no source maps, no console/debugger, and bundle size thresholds
-  - [ ] Define targets: p95 TTI < 2.5s (desktop fast 3G throttling), main bundle < 180KB gzip, total blocking time < 200ms
-  - [ ] Add a lightweight Web Vitals reporting hook (debug only) to spot regressions pre-prod
-
-### 6. IP protection (release hardening)
-
-- SPA artifacts
-  - [x] No source maps in prod (`build.sourcemap=false`), remove inline `sourceMappingURL` comments
-  - [x] Strip comments from JS/CSS; configure Terser `format.comments` to preserve third‑party license banners (e.g., `/@license|@preserve|^!/`)
-  - [x] Drop `console`/`debugger` and dev-only branches in prod builds; verify via CI grep
-  - [ ] Exclude docs/tests/maps and any non-runtime assets from `web/dist`
-
-- API container
-  - [ ] Build with bytecode-only: enable Docker build arg `STRIP_PY=1` to compile `.py` → `.pyc` and remove sources
-  - [ ] Multi-stage image that excludes `docs/`, `tests/`, examples, and tooling not needed at runtime
-  - [ ] Ensure DEBUG off, detailed tracebacks disabled in prod; version endpoints return minimal info
-
-- Verification in CI
-  - [x] Step: build SPA and assert no `*.map`, no `sourceMappingURL`, no `console|debugger` strings
-  - [x] Step: build API image with `STRIP_PY=1` and assert no `*.py` present in final layer
-  - [ ] License check: ensure license banners of third‑party code are retained where required
-
-- Operator docs remain in private repo
-  - [ ] Keep full documentation, annotations, and comments in the private repo and internal images only; ship minimal prod artifacts
-
-### 7. Coolify validation (pre-deploy)
-
-- Containers & builds
-  - [ ] Verify Dockerfiles build successfully in Coolify (multi-stage where applicable); ensure only runtime artifacts ship
-  - [ ] API image sanity: `DEBUG=0`, required envs present, correct port exposed, healthcheck paths wired (`/api/health` liveness, `/api/ready` readiness)
-  - [ ] Optional: build API with `STRIP_PY=1` and confirm no `.py` in final image (keeps IP hardening aligned)
-  - [ ] SPA build stage outputs hashed assets under `/static/app/` with base `/app`; confirm no source maps
-
-- Coolify app definitions
-  - [ ] Define services: API, SPA static (or landing), Postgres, optional Redis (Celery/async)
-  - [ ] Attach Traefik routes for `/`, `/app`, `/api`, `/static/app/`, `/media/` as per routing map
-  - [x] Configure environment variables (PROD) end-to-end — authoritative matrix now in `docs/ops_coolify_deployment_guide.md` (kept in sync)
-  - [ ] Health checks: API GET `/api/health`; readiness GET `/api/ready`; static GET `/` (or `/app/`)
-
-- PROD environment variables (must set)
-  - [x] Core: `SECRET_KEY`, `ALLOWED_HOSTS`, `PUBLIC_BASE_URL`, `DATABASE_URL`, `REDIS_URL` (if async)
-  - [x] Security: `SECURE_*`, `SESSION_*`, `CSRF_*`, `CSP_*` (Script/Style/Connect allow-lists minimal)
-  - [ ] OAuth: `GOOGLE_*`, `GITHUB_*`, `FACEBOOK_*`, `OAUTH_REDIRECT_URI`, JWKS/issuer where needed
-  - [x] Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, prices `PRICE_*` (enterprise placeholder noted)
-  - [ ] Async toggles: `EXPORTS_ASYNC`, `AI_ASYNC`, `CELERY_*` (if used)
-  - [ ] SPA: `VITE_BASE_URL`, `VITE_API_BASE`, `VITE_ROUTER_BASE=/app`, optional `VITE_UMAMI_*`
-  - [x] Uploads/OCR, Quotas, AI provider keys per `.github/copilot-instructions.md`
-
-
-### Deployment guide enhancements (ops_coolify_deployment_guide.md)
-
-- [ ] Add screenshots of critical steps (variables, routes, health checks)
-- [ ] Add copy-paste env block template extracted from authoritative matrix (avoid drift)
-- [ ] Post-deploy validation checklist: health endpoints, CSP errors absent, OAuth login, Stripe webhook received, file upload OK
-
-### NEW: Environment Doctor & Consistency
-
-- [x] Implement `manage.py env_doctor` command (completed 2025-09-08)
-  - Validates production invariants (SECRET_KEY not default, ALLOWED_HOSTS no `*`, CORS_ALLOW_ALL=0 when DEBUG=0)
-  - Ensures conditional groups complete (Stripe, OAuth, Redis/Celery, AI provider)
-  - Warns when JWT_SIGNING_KEY == SECRET_KEY in prod
-  - Lists unset optional security vars (e.g. CSP_*)
-  - Exit codes: 0 (ok/warnings), 1 (errors), 2 (strict errors)
-- [x] CI step invoking `python manage.py env_doctor --strict` added (`.github/workflows/env_doctor.yml`)
-- [x] Deployment guide updated with env doctor usage & production invocation block
-
-Status: Section retained for historical traceability; no further action required unless new env invariants added.
-
-### 8. Proxy/CSP and deploy routes (Coolify/Traefik)
-
-- [ ] Finalize routes: `/` landing, `/app` SPA, `/api`, `/static/app/`, `/media/`. Confirm CSP allow-lists per env (incl. Umami host).
-
-### 9. SPA tests (targeted)
-
-- [x] E2E: deep-link across OAuth + register path.
-- [x] Organizations standalone route renders and manage view (members/invites) wired.
-- [x] AuthorPanel notes and SectionDiff rendering covered.
-- [x] Authoring OCR upload previews and sends file_refs on write.
-
-## Acceptance tests — Billing (Stripe)
-
-- [ ] New signup → checkout → active subscription reflected in app
-- [ ] Free → capped → upgrade CTA works and usage updates
-- [~] Downgrade/cancel → plan changes at current_period_end
-- Webhook behaviors covered by unit tests: seats scaling [x], extras bundles [x], admin transfer recompute [x]
-
-## 10 Superadmin dashboard
-
-- [ ] Minimal ops panel: quota overrides, webhook retry/sync, usage export, feature toggles, ban users/orgs, modify users/orgs, model switches; audit + IsSuperUser only. Must be COMPLETELY secure.
-
-## 11 Front End Design (LAST STEP BEFORE DEPLOYING MVP)
-
-- [ ] Paginate app into separate views with a sidebar navigation (list is non-exhaustive)
-  - [ ] Account
-    - Set/Edit name
-    - Set/edit contact email (if separate from Oauth email)
-    - Set avatar image
-    - Add title & bio
-    - Connect more Oauths
-    - Delete account (all proposals written by account get tied to Org ID instead) (DANGER ZONE, confirm by re-authenticating with Oauth)
-    - Billing --> Redirect to billing view
-  - [ ] Organizations
-    - See list of organizations you are admin/member of in table with names, logos, description, allocated monthly proposals, current usage
-    - Create new organization
-    - Edit existing organizations
-    - Add/edit name and description
-      - Set logo image
-      - Change allocations (ENTERPRISE ADMIN ONLY, PRO USERS DEFAULT 100% ALLOCATION OF PROPOSALS TO THE ONE ALLOWED ORG ADMINSHIP)
-      - Invite/edit/remove members
-      - Delete organization (DANGER ZONE, confirm by inputting organization name in text field) (proposals written by members of organization get tied to users and no longer accessible to ex-org admin)
-  - [ ] Proposals
-    - See list of proposals, their status, times exported.
-    - Create proposals --> Opens new full-screen editor view with survey on the left hand-side of the screen, drafting (by AI) happening dynamically on the right-hand side of the screen, so users can watch the document expand in real-time. Streaming responses (if enabled)
-    - Edit proposals --> Determine whether to manually edit or rerun AI-assisted writing
-        --> If manual, open complete file in md-compatible text editor
-        --> If rerunning assisted writing, let user choose specific section or "from the top" and rerun AI assisted survey logic on selected sections
-    - Archive proposals
-    - Delete proposals (instantly deletes, unlike archive which stores for 6 weeks)
-    - Share proposals (enter e-mail address of user you are sharing with or select from drop-down of members of organization)
-    - See proposals shared with you (including who created them)
-    - See/edit/archive/delete all proposals within org (ADMINS ONLY) including who created them
-    - Export proposals (select supported format)
-    - [ ] Archive
-      - See archived proposals
-      - Restore or delete archived proposals
-  - [ ] My files
-    - See all uploaded files and how many times they have been used within proposals
-    - Edit, overwrite or delete uploaded files
-    - Download files
-  - [ ] Logs (ORG AND ENTERPRISE ADMINS ONLY)
-    - See all logs of organization(s). Creations, archivings, deletions, etc. and which user did what and when
-  - [ ] Settings (UI settings like dark/light theme, more to come)
-  - [ ] Billing (billing portal. Upgrade/downgrade/cancel/buy top-up bundles, see billing dates, see last payment, see last invoice, etc)
-  - [ ] Login
-  - [ ] Register
-  - [ ] Logout confirmation
-  - [ ] Billing confirmation
-  - [ ] Dashboard (shared organization notes, usage statistics, quick overview over latest proposals, charts showing helpful information), space for marketing and update logs from Granterstellar.
-  - [ ] Deletion confirmations
-  - [ ] Get support page with live chat and ability to submit tickets
-  - [ ] Custom templates (allow users to upload their own grant proposal templates for the AI to fetch)
-  - [ ] Style modals, error popups, other dynamic content
-  - [ ] Review and update copy across app, pages, errors, banners, modals, etc, to be more user-friendly and less technical.
-- [ ] Style pages one by one with iterations and approval for each page before moving on. Prefer global variables and light-weight CSS when able. Take inspiration from landing page for general design language. Should be modern, sleek, lots of full-page pages with plenty of white-space, easing transitions between pages, survey questions, etc.. Make use of templates folder. Design language should remind users of communicating with a living typewriter.
-
-## Open backlog (scoped, non-exhaustive)
-
-### Recently Completed (2025-09-08)
-
-- Formatter blueprint injection (conditional append of instructions + sorted JSON schema for role `formatter`).
-- Template drift detection function with DB refetch; test `test_context_includes_checksum_and_drift_detection` green.
-- Automatic checksum recomputation on template save to avoid stale comparisons.
-- Deterministic redaction taxonomy + persisted `redaction_map` enabling reproducible audits.
-
-### Follow-Up (Prompt Governance)
-
-- [ ] Drift metrics aggregation (count drifted templates / 24h) & admin report.
-- [ ] Redaction coverage metric (tokens per category) for anomaly detection.
-- [ ] Negative control drift test (unchanged template after unrelated field update).
-- [ ] Admin UI: view original vs redacted prompt snapshot + category legend.
-- [ ] Blueprint schema lint (ensure stable ordering, max size guard) in CI.
-- [ ] Optional: redact_map diff tool if taxonomy expands.
-- [ ] Centralize validation via decorator / wrapper (reduce duplication & enable metrics around failures).
-- [ ] Auto-repair attempt for trivial planner issues (e.g., empty sections => deterministic fallback) before failing.
-- [ ] Replace reviser stub diff with semantic diff engine output and tighten validator.
-
-Database
-
-- [ ] Optional UsageEvents (AI metering)
-
-Backend/API
-
-- [ ] Proposals: versioning metadata on PATCH
-  - (Merged) Prompt safety handled under Alpha Critical Path item 5 (Prompt Safety / Injection Shield) – removed duplicate backlog entry.
-
-Dependency & Supply Chain
-
-- [ ] Add Python constraints/lock (pip-tools compile → requirements.txt + constraints.txt)
-- [ ] Commit npm lockfile and enforce `npm ci` (update Docker build)
-- [x] CI: add pip-audit & npm audit (prod deps) failing on HIGH/CRITICAL (heuristic gating v1; precise JSON severity parsing task open)
-- [x] Weekly automated dependency updates (Dependabot config at `.github/dependabot.yml` — grouped minor/patch + dev deps)
-- [x] Generate SBOM (CycloneDX) for Python & JS in CI and archive artifact
-- [ ] Document dependency triage workflow in `docs/ops_runbook.md`
-
-API Hardening & Auth
-
-- [ ] Scoped throttle for login (`throttle_scope="login"`) + test brute-force attempts
-- [ ] Implement lockout (username+ip) after configurable failed attempts (exponential backoff)
-- [ ] Remove SessionAuthentication from DRF defaults (retain for admin only)
-- [ ] Explicit AllowAny only on public endpoints; audit others (add test)
-- [ ] Startup environment validation (critical vars) fail-fast when DEBUG=0
-- [ ] Add DRF pagination defaults (DEFAULT_PAGINATION_CLASS, PAGE_SIZE) and adjust list views
-
-Structured Logging & Observability
-
-- [ ] Request ID middleware + log propagation
-- [ ] Introduce structured JSON logs (structlog or stdlib formatter) with core fields
-- [ ] Timing middleware emits duration_ms field
-- [ ] Redact PII (emails, tokens) from logs; add test
-- [ ] Upload rejection log includes reason + request_id (test)
-
-Exports & Integrity
-
-- [ ] Guard: abort export if generated artifact exceeds size/page thresholds
-- [ ] Add checksum verification endpoint or `?verify=1` to re-hash artifact
-- [ ] Store & return export size metadata
-- [ ] Cleanup task for stale/failed export jobs
-
-AI Providers (additional)
-
-  (Merged) Timeout/retry & circuit breaker covered by Alpha Critical Path item 6; duplicate removed.
-  
-- [ ] Token usage accounting scaffold
-- [x] Prompt redaction layer (strip PII) before logging — covered by deterministic redaction taxonomy.
-
-RLS & Roles Model
-
-- [ ] Replace `is_staff` role inference with explicit user/org role resolver
-- [ ] Extend role matrix (OWNER, ADMIN, MEMBER) – migration plan with backward compat
-- [ ] Tests ensuring staff flag alone does not elevate RLS access
-
-Data & Privacy
-
-- [ ] PII classification document (fields, retention) added to docs
-- [ ] Implement user data export & delete endpoints + tests
-- [ ] Redact user identifiers in structured logs (configurable override in DEBUG)
-- [ ] Add backup encryption guidance (GPG/KMS) to `security_hardening.md`
-
-Performance / Caching (API additions)
-
-- [ ] ETag/Last-Modified headers for proposal detail (hash of updated_at)
-- [ ] Validate gzip/br served (integration test) via reverse proxy or middleware
-- [ ] Bootstrap aggregate endpoint (account+orgs+usage) cached short-term
-
-Testing Enhancements (supplemental)
-
-- [ ] Security headers test (DEBUG=0) asserting CSP/HSTS/COOP/CORP
-- [ ] Throttle & lockout tests (login, file upload)
-- [ ] Pagination test ensures default page size & navigation keys
-- [ ] Export checksum stability test (md/pdf/docx)
-- [ ] RLS negative test for cross-org leakage attempt
-
-Container & Build
-
-- [ ] Parameterize gunicorn workers (`WEB_CONCURRENCY`)
-- [ ] Set reproducible build env (`PYTHONHASHSEED=0`) in Dockerfile
-- [ ] Extend STRIP_PY test to cover new modules added
-- [ ] Multi-arch build documentation
-
-## 12 i18n Readiness (pre-design hardening)
-
-Goal: Centralize ALL user-facing strings before visual redesign to avoid churn; establish translation pipeline & enforcement. Users should never see unfrozen copy outside keys store.
-
-Phases
-
-- [ ] Inventory & Classification — Script: scan `web/src/**/*.{ts,tsx,js,jsx}` + root HTML pages for probable user-facing literals (regex: words with spaces, exclude ALL_CAPS, URLs, variables). Output CSV: file, line, original_text, hash.
-- [ ] Key Namespace Design — Adopt convention `area.component.purpose` (e.g., `auth.login.button_submit`). Document in `docs/design_system.md` (i18n section) and add linter rule description.
-- [ ] Minimal Runtime Layer — Implement lightweight `t(key, fallback?)` + `useT()` hook with TypeScript key union generated from JSON schema. No heavy lib yet (keep bundle small); future-compatible with ICU messages.
-- [ ] Messages Store Scaffold — Create `web/src/locales/en/messages.json` (flat map) + generation script to sort keys alphabetically & validate collisions.
-- [ ] Extraction Tooling — Node script: replaces raw literals (approved list) with `t('...')`; emits diff summary (# replaced, skipped). Manual review required for ambiguous strings (length < 4, dynamic templates, placeholders).
-- [ ] Placeholder & Interpolation — Implement simple `{name}` variable substitution using template function `t.key('auth.greeting', {name: userFirstName})` with compile-time key checking.
-- [ ] HTML & Django Templates Pass — Extract strings from `index.html`, landing pages, simple Django templates (if any user-facing). Replace with placeholders pulling from a preloaded JSON (inline script tag `window.__LOCALES__`).
-- [ ] Backend i18n Scaffold — Add `locale/` with `django-admin makemessages` config (even if EN only). Ensure `USE_I18N=True`. Add extraction make target.
-- [ ] Enforcement ESLint Rule — Custom rule or config: forbid string literals in JSX children unless wrapped in `t()` (allow list for a11y attributes, test files). Failing CI if new violations.
-- [ ] CI Guard — Job: run extraction diff; if new raw strings detected (not in allowlist), fail with guidance.
-- [ ] Progress Metric — Script counts (% externalized = externalized / (externalized + remaining_detected)). Print badge in CI logs.
-- [ ] Accessibility Synergy — Integrate axe-core scans (dashboard, proposal editor, billing, uploads) after strings externalized to ensure labels preserved.
-- [ ] Docs — Add `docs/i18n.md`: philosophy, key naming, extraction workflow, adding new strings checklist.
-- [ ] Post-Extraction Cleanup — Remove duplicate or unused keys (script: reference count across source; warn unused >30 days).
-- [ ] Future (Deferred) — Add locale switcher UI + language negotiation (Accept-Language) + crowd/managed translation pipeline.
-
-Tests
-
-- [ ] Test: extraction script produces deterministic hash for unchanged files.
-- [ ] Test: ESLint rule flags inline string in JSX.
-- [ ] Test: interpolation `{name}` replaced correctly and escapes HTML.
-- [ ] Test: fallback returns key when missing translation (and logs once).
-- [ ] Test: progress metric output >= previous run (non-regression) or explicitly annotated decrease.
-
-Housekeeping
-
-- [ ] Add CODEOWNERS (billing/, db_policies/, middleware, ai/)
-- [ ] Update CONTRIBUTING with dependency/security update cadence
-- [ ] Add `scripts/env_doctor.py` (invoked pre-test in CI)
-- [ ] Optional Makefile with standard targets (lint, test, build, doctor)
-
-Security Hardening (new audit additions)
-
-- [ ] DRF: enforce authenticated default permission (remove DEBUG AllowAny fallback); explicit AllowAny only per public view
-- [ ] Startup assertion: abort if DEBUG=1 and non-local host in `ALLOWED_HOSTS`
-- [ ] JWT: require distinct `JWT_SIGNING_KEY` in production (error if identical to SECRET_KEY)
-- [ ] CSP reporting: add `CSP_REPORT_URI` + `CSP_REPORT_ONLY` envs; implement report-only mode toggle
-- [ ] Virus scan command tests (invalid chars, disallowed binary, timeout) ensuring fail-closed behavior
-- [ ] Add safeguard for large OCR durations (timing + warn log > threshold)
-
-Exports
-
-- [ ] Asset embedding (images/diagrams) with stable paths
-
-Frontend (SPA)
-
-- [ ] Integrate SurveyJS for authoring
-
- 
-
-Proxy/Networking
-
-- [ ] Coolify/Traefik labels or UI config as required; document
-
-Operations & Security
-
-- [ ] Basic metrics: request latency, AI invocation duration, Celery task success/fail counts (expose /metrics if/when Prometheus planned)
-
-Maintainability & Refactors
-
-- [ ] Split monolithic `settings.py` into logical modules (security, storage, billing) or adopt split-settings (incremental)
-- [ ] Extract billing webhook helpers into `billing/services.py` with dedicated unit tests (idempotency + discount + bundle credits)
-- [ ] Centralize file security helpers (`_is_under_media_root`, signature checks) in a shared util module + tests
-
-Test Coverage Additions
-
-- [ ] Test: production DRF default permission remains IsAuthenticated
-- [ ] Test: CSP header forbids inline styles unless `CSP_ALLOW_INLINE_STYLES=1`
-- [ ] Test: webhook signature required when DEBUG=0 (invalid signature → 400)
-- [ ] Test: virus scanner invalid command returns `scan_error`
-- [ ] Test: file upload throttle (after implementing) returns 429 on rapid bursts
-- [ ] Test: JWT_SIGNING_KEY enforcement (prod simulation)
-- [ ] Test: structured logging emits expected keys for upload rejection
-- [ ] Test: OCR large file skipped when size > TEXT_EXTRACTION_MAX_BYTES
-- [ ] Test: add i18n extraction smoke (no duplicate msgids) once scaffolding added
-
-## Notes
-
-- Keep Markdown as canonical export. Prefer async for long AI/exports. Maintain RLS correctness; enforce quotas consistently with `X-Org-ID` and role checks.
-- When docs and code diverge, update both and reflect deltas here briefly.
+Legend: [ ] todo, [~] in progress, [x] done
+
+## Alpha Critical Path (User Journey)
+
+High‑priority backend + minimal UI tasks required for the core assisted proposal flow before broader polish.
+
+- [x] Planner → Section Materialization (sync + async parity) & Serializer Sections Field (instantiate sections from planner blueprint; expose `sections` list; legacy `content` deprecation pending migration cmd)
+- [x] Call URL Field & Immutability (model field + migration + serializer write-once guard + tests)
+- [ ] Enforce 5 Revision Cap (backend enforcement + 409; central revision service)
+- [ ] Dynamic Question Generation (single-run planner; staged retrieval: RAG template → RAG sample → web search ingest → universal fallback; record fallback_mode)
+- [ ] Centralize Revision Service & Promotion Invariant (state=approved + locked; controlled unlock path)
+- [ ] Memory Injection Upgrade (structured block; usage_count scoring; no decay)
+- [ ] Prompt Safety / Injection Shield (pre-flight sanitize; high-risk reject; low-risk neutralize)
+- [ ] Provider Fallback & Circuit Breaker (timeouts, retry, secondary model, cooldown)
+- [ ] Metrics Extensions (tokens + timing + structure_hash + question_hash + fallback_mode flag)
+- [ ] RAG Web Search Ingestion Agent (fetch remote templates/samples when RAG lacks grant-specific data; persist raw + extracted structure; queue embedding)
+- [ ] RAG Progressive Prepopulation (offline script / management command to bulk ingest common grant templates & samples before alpha launch)
+- [ ] Dual Asset Storage (store original PDF + extracted structured sections & headings for formatting agent reuse; link via asset id)
+- [ ] Concurrent Embedding Pipeline (planner triggers background embedding tasks for newly added assets without blocking user flow)
+- [ ] Org Metadata Preload Hook (inject existing org profile data into planner variable set before question gap analysis)
+- [ ] Remove Quota Middleware (deduplicate enforcement; rely on permission class)
+- [ ] E2E Alpha Test Flow (URL → plan (once) → Q&A → revise (≤5/section) → approve → format → export; asserts determinism & metrics)
+- [ ] Documentation: ai_prompts (roles, variables, safety, metrics fields, fallback modes)
+- [ ] Basic Diff UI Consumption (structured blocks; remaining revision count)
+
+### Recently Added (Shipped This Session)
+
+- [x] Personal Org Auto-Provision & Reuse Test (ensures single personal org reused across proposals)
+- [x] Async Planner Materialization Test (`test_async_plan_materialization`) validating background job creates sections & records created keys
+
+### Next Up (Promoted)
+
+- [~] Enforce 5 Revision Cap
+	- Introduce constant (settings override) `AI_SECTION_REVISION_CAP=5`
+	- Enforce in `append_revision` (guard before save) returning error token/state
+	- API revise endpoint: on cap breach return 409 `{error: 'revision_cap_reached', remaining: 0}`
+	- Metrics: record cap breach event (AIMetric.success=false, reason)
+	- Tests: (1) allow up to 5 revisions; (2) 6th returns 409; (3) lock/unlock does not reset count; (4) separate section independent counts
+	- Serializer: include `remaining_revision_slots` per section in sections list (non-breaking additive)
+	- Docs update (`proposals.md` + this Todo) after implementation
+
+- [ ] Rudimentary Styling Baseline (layout spacing, readable typography, diff highlight minimal)
+
+## Alpha → MVP Interim Backlog (Condensed)
+
+Grouped tasks to lift quality from working alpha to a credible MVP; prioritize after Critical Path completion.
+
+### AI & Retrieval
+
+- [ ] Retrieval Caching (section/grant hash → snippet IDs TTL)
+- [ ] Scheduled RAG Refresh (batch ingestion cadence + summary log)
+- [ ] Re-Embed Drift Task (on embedding model version bump)
+- [ ] Cleanup & TTL (purge old AIJob / contexts; archive metrics)
+- [ ] Semantic Rerank (low)
+- [ ] Streaming Writer (low)
+
+### Prompt Governance & Safety
+
+- [ ] Drift Metrics Aggregation
+- [ ] Redaction Coverage Metric
+- [ ] Blueprint Schema Lint (size/order guard)
+- [ ] Centralized Validation Decorator
+
+### Performance & Optimization
+
+- [ ] Preload Critical Above-the-Fold Chunks
+- [ ] Bundle Size Analysis & Budget (set target <180KB main)
+- [ ] Debounce Autosaves / Limit Concurrent Fetches
+- [ ] Paginate & Index Heavy Lists (proposals/orgs)
+- [ ] Gzip/Br + ETag/Last-Modified for cacheable GETs
+- [ ] Web Vitals Hook (debug)
+
+### Security & Auth Hardening
+
+- [ ] Login Scoped Throttle + Lockout
+- [ ] Remove SessionAuthentication (API) except admin
+- [ ] Explicit AllowAny Audit & Tests
+- [ ] DRF Pagination Defaults
+- [ ] Startup Env Validation (prod hard fail)
+
+### Logging & Observability
+
+- [ ] Request ID Middleware
+- [ ] Structured JSON Logs + PII Redaction
+- [ ] Timing Middleware (duration_ms)
+- [ ] Upload Rejection Reason Logging + Test
+
+### Exports & Integrity
+
+- [ ] Size/Page Guard
+- [ ] Checksum Verification Endpoint
+- [ ] Export Size Metadata
+- [ ] Stale Export Cleanup Task
+
+### Billing / Usage
+
+- [ ] Stripe Promotions Live E2E (discount reflected in /api/usage)
+- [ ] Downgrade / Cancel Flow Validation
+
+### Deployment & Containerization
+
+- [ ] Bytecode-Only API Image (STRIP_PY)
+- [ ] Multi-Stage Image (exclude docs/tests)
+- [ ] Coolify Health Routes & Traefik Route Finalization
+- [ ] License Banner Check (CI)
+
+### Data & Privacy
+
+- [ ] PII Classification Doc
+- [ ] User Data Export & Delete Endpoints
+- [ ] Backup Encryption Guidance
+
+### RLS & Roles
+
+- [ ] Explicit Role Resolver (replace is_staff inference)
+- [ ] Extended Role Matrix Migration (OWNER/ADMIN/MEMBER)
+
+### Testing Enhancements
+
+- [ ] Planner Schema Negative Tests
+- [ ] Writer JSON Rejection Test
+- [ ] Reviser Missing Diff / Formatter Missing Field Tests
+- [ ] Quota Denial Test
+- [ ] Injection Shield Block Test
+- [ ] Retrieval Fallback (no snippets) Test
+- [ ] Memory Scoring Aging Test
+- [ ] Security Headers (DEBUG=0)
+- [ ] Throttle & Lockout Tests
+- [ ] Export Checksum Stability (md/pdf/docx)
+- [ ] RLS Cross-Org Negative Test
+
+### Governance / Metrics
+
+- [ ] Token Usage Accounting Scaffold (feed into quotas)
+- [ ] Drift / Redaction Metrics Surfaced (admin)
+
+### i18n (Deferred until post-alpha core solidifies)
+
+- [ ] Inventory & Key Namespace Design
+- [ ] Messages Store + Extraction Script
+- [ ] ESLint Rule (no raw literals)
+
+### Superadmin / Ops
+
+- [ ] Minimal Ops Panel (quota overrides, webhook retry, usage export)
+
+### Frontend Enhancements (Post-Alpha Styling Pass)
+
+- [ ] Complete styling pass
+- [ ] Sidebar Navigation Upgrade
+- [ ] Archive & Restore UI
+- [ ] Proposal Sharing UI
+- [ ] Basic Dashboard (usage + recent proposals)
+- [ ] Landing Page Design
+
+## Removed Content
+
+Status snapshots, detailed narratives, completed histories, exhaustive design checklists, and low-level execution notes have been pruned. Historical achievements and implementation details belong in `CHANGELOG.md` or dedicated docs (`docs/*`).

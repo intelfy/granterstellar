@@ -14,7 +14,7 @@ Future extensions: dynamic reservation percentages, semantic tag buckets, refine
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Dict, Any, Sequence, Optional
+from typing import Any, Sequence
 
 
 def _approx_tokens(text: str | None) -> int:
@@ -25,22 +25,22 @@ def _approx_tokens(text: str | None) -> int:
 
 @dataclass
 class BudgetResult:
-    retrieval: List[Dict[str, Any]]
-    memory: List[Dict[str, Any]]
-    file_refs: List[Dict[str, Any]]
+    retrieval: list[dict[str, Any]]
+    memory: list[dict[str, Any]]
+    file_refs: list[dict[str, Any]]
     used_retrieval_tokens: int
     used_memory_tokens: int
     used_file_ref_tokens: int
     total_used: int
-    model_max_tokens: Optional[int]
+    model_max_tokens: int | None
     reserved_output_tokens: int
 
 
 def apply_context_budget(
     *,
-    retrieval: Sequence[Dict[str, Any]] | None,
-    memory: Sequence[Dict[str, Any]] | None,
-    file_refs: Sequence[Dict[str, Any]] | None,
+    retrieval: Sequence[dict[str, Any]] | None,
+    memory: Sequence[dict[str, Any]] | None,
+    file_refs: Sequence[dict[str, Any]] | None,
     model_max_tokens: int | None,
     reserved_output_tokens: int = 512,
     max_retrieval_tokens: int = 1200,
@@ -57,8 +57,8 @@ def apply_context_budget(
     else:
         ctx_cap = None
 
-    def trim(items: List[Dict[str, Any]], token_cap: int) -> tuple[List[Dict[str, Any]], int]:
-        out: List[Dict[str, Any]] = []
+    def trim(items: list[dict[str, Any]], token_cap: int) -> tuple[list[dict[str, Any]], int]:
+        out: list[dict[str, Any]] = []
         used = 0
         for it in items:
             t = it.get("token_len") or _approx_tokens(it.get("text"))

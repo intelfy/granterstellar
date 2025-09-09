@@ -35,7 +35,7 @@ ForGranted turns a raw grant call (URL or text) plus your organization profile i
 2. The planning agent researches + matches templates/samples (RAG) and builds a section blueprint.  
 3. For each section: we ask concise questions to fill real gaps (org metadata reused automatically).  
 4. The writing agent drafts; you review, revise, or request changes (diffs coming).  
-5. Approved sections lock quota usage; memory captures reusable facts for later prompts.  
+5. Approved sections lock their content (still revisable after unlock while revisions remaining); future memory snippets (usage_count scored) will boost context relevance.  
 6. Formatting agent assembles a final structured proposal (semantic markdown → PDF/DOCX).  
 7. Exports are deterministic: same inputs → same hash (integrity you can trust).  
 
@@ -43,23 +43,24 @@ ForGranted turns a raw grant call (URL or text) plus your organization profile i
 
 ### Core (Alpha)
 
-- Guided Q&A planning (template + retrieval augmented)
-- AI drafting & revision cycles per section
+- Guided Q&A planning (single-run; fallback universal template when retrieval empty)
+- AI drafting & revision cycles per section (proposal already sectionized)
 - Deterministic formatting & export (PDF/DOCX)
-- Organizational usage quotas & plan-based limits
+- Organizational usage quotas & plan-based limits (lifetime free + monthly paid)
 - Stripe-powered subscriptions (seats, bundles, discounts)
 - Secure file uploads (content-type, magic-byte & size checks)
 - PII redaction layer in prompt assembly (hashed category tokens)
-- AI memory suggestions (auto-captured reusable facts)
+- (Planned) Memory snippet suggestions (usage_count scoring; not yet enforced in prompts)
 
 ### Coming Next (Short Horizon)
 
-- Semantic diff for revisions
-- Section model + per-section approval workflow
-- Dynamic question generation engine
+- Planner → Section materialization improvements (auto instantiate sections from blueprint)
+- Enforce 5 revision cap per section (currently truncates to 50)
+- Dynamic question generation engine (template + retrieval + web fallback)
 - Provider fallback + circuit breaker
 - Prompt injection shield
-- Token & phase metrics + improved quota binding
+- Memory injection block (top K usage_count snippets)
+- Metrics hashes (structure_hash, question_hash, fallback_mode flag)
 
 ### Later (Roadmap Highlights)
 
@@ -150,7 +151,7 @@ External contribution guidelines will open post-alpha. Until then, internal engi
 
 ## 14. Contact / Early Feedback
 
-Questions, partnership, or early access request: thomas@intelfy.dk  
+Questions, partnership, or early access request: [thomas@intelfy.dk](mailto:thomas@intelfy.dk)  
 Security disclosures: see `SECURITY.md` for coordinated disclosure instructions.
 
 ## 15. Legal & Compliance (Preview)
@@ -172,8 +173,8 @@ Security disclosures: see `SECURITY.md` for coordinated disclosure instructions.
 | Core authoring workflow | Alpha (iterating) |
 | Deterministic exports | Implemented |
 | RLS data isolation | Implemented |
-| AI memory & redaction | Implemented (expanding) |
-| Section diff engine | In progress (planned) |
+| AI memory & redaction | Redaction implemented; memory injection pending |
+| Section diff engine | Implemented (structured block logging) |
 | Dynamic Q generation | Pending |
 | Provider fallback | Pending |
 | Billing & quotas | Implemented |

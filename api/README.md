@@ -132,9 +132,9 @@ Maintenance
 
 ## AI endpoints
 
-- POST /api/ai/plan
-- POST /api/ai/write
-- POST /api/ai/revise
+- POST /api/ai/plan (single-run planner; subsequent calls may return cached/blocked response)
+- POST /api/ai/write (draft generation for a section; rejects if section locked)
+- POST /api/ai/revise (applies revision diff; upcoming enforcement: max 5 revisions per section → 409 beyond limit)
 - POST /api/ai/format (final formatting pass after all sections are approved)
 - GET /api/ai/jobs/{id} → {status,result,error}
 
@@ -142,7 +142,7 @@ Async (optional):
 
 - Set AI_ASYNC=1 and configure REDIS_URL for Celery broker/back-end.
 - When enabled, the above POST endpoints return {job_id,status} and you can poll GET /api/ai/jobs/{id} for completion.
-- Proposals: /api/proposals (scoped; create enforces quota)
+- Proposals: /api/proposals (scoped; create enforces quota; legacy `content` JSON supported — sections are the canonical source moving forward)
 - Exports: POST /api/exports (format: md|pdf|docx), GET /api/exports/{id}
 - Files: POST /api/files (pdf/png/jpg/jpeg/docx/txt); txt/docx text extraction stub
   - Text extraction: txt/docx parsed; PDFs extracted via pdfminer; optional OCR for images (OCR_IMAGE=1) and PDFs (OCR_PDF=1 with `ocrmypdf` binary installed)

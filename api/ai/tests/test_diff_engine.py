@@ -7,5 +7,10 @@ class DiffEngineTests(SimpleTestCase):
         old = "Hello world\nLine2"
         new = "Hello brave world\nLine2"
         res = diff_texts(old, new)
-        self.assertIn('brave', res.summary)
-        self.assertGreater(res.change_ratio, 0)
+        self.assertIsInstance(res, dict)
+        self.assertIn('change_ratio', res)
+        self.assertIn('blocks', res)
+        self.assertGreater(res['change_ratio'], 0)
+        # ensure a change block references the inserted token
+        joined_after = "\n".join(b['after'] for b in res['blocks'])
+        self.assertIn('brave', joined_after)

@@ -1,0 +1,23 @@
+# Primary key store for user-facing copy (pre-i18n)
+# Naming: dot.scoped.keys; placeholders: {name}, {count}, {limit}
+# NOTE: Keep keys stable once used; prefer adding new over mutating semantics.
+
+ui:
+  nav:
+    dashboard: "Dashboard"
+  proposals:
+    empty_state: "No proposals yet"
+
+errors:
+  revision:
+    cap_reached: "You've reached the revision limit ({count}/{limit})."
+  generic:
+    unexpected: "Something went wrong. Please try again."
+
+ai:
+  revise:
+    locked: "Section is locked. Unlock before revising."
+
+billing:
+  checkout:
+    success_title: "Subscription active"

@@ -7,14 +7,13 @@ from django.conf import settings
 from django.utils import timezone
 
 from billing.permissions import CanCreateProposal
-from orgs.models import Organization
+from orgs.models import Organization, OrgUser
 from .models import Proposal
 from .serializers import ProposalSerializer
 from ai.section_pipeline import promote_section, get_section
 from ai.models import AIMetric
 from rest_framework.views import APIView
 from billing.quota import can_unarchive
-from orgs.models import OrgUser
 
 
 class ProposalViewSet(viewsets.ModelViewSet):
@@ -28,37 +27,61 @@ class ProposalViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()] if not settings.DEBUG else [permissions.AllowAny()]
 
     def get_queryset(self):
+        """Return proposals scoped to either a specific org (X-Org-ID) or all
+        organizations the user belongs to (admin or member).
+
+        Previous logic attempted to support personal proposals with org=NULL.
+        The schema has since evolved to enforce org NOT NULL (RLS + policies),
+        so we expose a *personal organization* concept instead. Any legacy
+        references to org NULL are removed in favor of auto-provisioning a
+        personal org on first proposal creation (see perform_create).
+        """
         qs = super().get_queryset()
         user = self.request.user
         if not getattr(user, "is_authenticated", False):
             return qs.none()
-        org: Optional[Organization] = None
-        org_id = self.request.headers.get("X-Org-ID")
-        if org_id and org_id.isdigit():
-            org = Organization.objects.filter(id=int(org_id)).first()
-        # Scope: personal (org is null, author=user) or org (org=org)
-        if org:
-            # Enforce membership at the application layer (in addition to DB RLS policies)
-            is_member = OrgUser.objects.filter(org=org, user_id=user.id).exists()
-            if not is_member:
-                return qs.none()
-            qs = qs.filter(org=org)
-        else:
-            qs = qs.filter(author=user, org__isnull=True)
-        return qs
+        # Aggregate org ids where user is admin or member
+        admin_org_ids = Organization.objects.filter(admin=user).values_list("id", flat=True)
+        member_org_ids = OrgUser.objects.filter(user_id=user.id).values_list("org_id", flat=True)
+        allowed_org_ids = set(admin_org_ids) | set(member_org_ids)
+        org_id_header = self.request.headers.get("X-Org-ID")
+        if org_id_header and org_id_header.isdigit():
+            oid = int(org_id_header)
+            if oid in allowed_org_ids:
+                return qs.filter(org_id=oid)
+            return qs.none()
+        # No explicit org header: return all proposals from allowed orgs
+        return qs.filter(org_id__in=allowed_org_ids)
 
     def perform_create(self, serializer: ProposalSerializer):
+        """Create a proposal ensuring an org is always attached.
+
+        Behavior:
+          - If X-Org-ID provided and user is a member/admin → use that org.
+          - Else: use (or create) a per-user personal org (admin = user).
+            A membership row is also ensured for consistency with queries.
+        """
         user = self.request.user
         org: Optional[Organization] = None
         org_id = self.request.headers.get("X-Org-ID")
         if org_id and org_id.isdigit():
-            org = Organization.objects.filter(id=int(org_id)).first()
-        # If org-scoped creation, require membership
-        if org is not None:
-            is_member = OrgUser.objects.filter(org=org, user_id=user.id).exists()
-            if not is_member:
-                # Fall back to personal scope when header is invalid
-                org = None
+            candidate = Organization.objects.filter(id=int(org_id)).first()
+            # Use getattr to avoid static type checker complaints; admin_id always present at runtime.
+            if candidate and (
+                getattr(candidate, 'admin_id', None) == getattr(user, 'id', None)
+                or OrgUser.objects.filter(
+                    org=candidate,
+                    user_id=getattr(user, 'id', None),
+                ).exists()
+            ):
+                org = candidate
+        if org is None:
+            # Personal org provisioning path
+            org = Organization.objects.filter(admin=user).order_by("id").first()
+            if org is None:
+                org = Organization.objects.create(name=f"{user.username}-personal", admin=user)
+            # Ensure membership record (idempotent)
+            OrgUser.objects.get_or_create(org=org, user=user, defaults={"role": "admin"})
         serializer.save(author=user, org=org)
 
     def partial_update(self, request: Request, *args, **kwargs):

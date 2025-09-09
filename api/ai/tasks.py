@@ -8,6 +8,7 @@ from . import retrieval
 from .section_pipeline import get_section, save_write_result, apply_revision
 from .validators import validate_role_output, SchemaError
 from .diff_engine import diff_texts
+from .section_materializer import materialize_sections
 
 
 def _provider():
@@ -62,7 +63,26 @@ def run_plan(job_id: int):
                 snippet_ids=[s['chunk_id'] for s in snippets],
                 retrieval_metrics={"snippet_count": len(snippets), **validation},
             )
-        job.result_json = plan  # type: ignore[assignment]
+        # Extract blueprint (same logic as sync endpoint) and materialize sections if proposal id present.
+        created_sections: list[str] = []
+        try:
+            blueprint = []
+            proposal_id_val = None
+            if isinstance(plan, dict):
+                if isinstance(plan.get('sections'), list):
+                    blueprint = plan.get('sections')  # type: ignore[assignment]
+                elif isinstance(plan.get('blueprint'), list):
+                    blueprint = plan.get('blueprint')  # type: ignore[assignment]
+                proposal_id_val = plan.get('proposal_id')
+            if proposal_id_val and blueprint:
+                mat = materialize_sections(proposal_id=int(proposal_id_val), blueprint=blueprint)
+                created_sections = [s.key for (s, c) in mat if c]
+        except Exception as me:  # pragma: no cover - defensive
+            created_sections = ["error:" + str(me)[:120]]
+        job.result_json = {  # type: ignore[assignment]
+            "plan": plan,
+            "created_sections": created_sections,
+        }
         job.status = 'done'
         dt_ms = int((time.time() - t0) * 1000)
         try:
@@ -254,6 +274,33 @@ def run_revise(job_id: int):
             job.error_text = 'section_locked'
             job.save(update_fields=['status', 'error_text'])
             return
+        # Revision cap enforcement (async path).
+        try:
+            if sec_obj is not None:
+                cap_raw = getattr(settings, 'PROPOSAL_SECTION_REVISION_CAP', 5)
+                try:
+                    cap_val = int(cap_raw) if cap_raw not in (None, '') else 5
+                except Exception:
+                    cap_val = 5
+                if cap_val <= 0:
+                    cap_val = 5
+                current_count = len(sec_obj.revisions or [])
+                if current_count >= cap_val:
+                    job.status = 'error'
+                    job.error_text = 'revision_cap_reached'
+                    job.save(update_fields=['status', 'error_text'])
+                    try:
+                        AIMetric.objects.create(
+                            type='revise', model_id='revision_cap_blocked', duration_ms=0, tokens_used=0,
+                            success=False, created_by=job.created_by, org_id=job.org_id,
+                            proposal_id=job.input_json.get('proposal_id'), section_id=sec_id,
+                            error_text='revision_cap_reached',
+                        )
+                    except Exception:
+                        pass
+                    return
+        except Exception:  # pragma: no cover
+            pass
         rev_snippets = retrieval.retrieve_for_section(
             job.input_json.get('section_id') or '',
             {"change_request": job.input_json.get('change_request') or ''},
@@ -270,7 +317,7 @@ def run_revise(job_id: int):
         diff_res = diff_texts(base_text, res.text)
         validation = {}
         try:
-            validate_role_output('revise', {"revised": res.text, "diff": {"added": [], "removed": []}})
+            validate_role_output('revise', {"revised": res.text, "diff": diff_res})
             validation = {"revise_valid": True}
         except SchemaError as ve:  # pragma: no cover
             validation = {"revise_valid": False, "error": str(ve)[:200]}
@@ -297,7 +344,7 @@ def run_revise(job_id: int):
                 retrieval_metrics={
                     "snippet_count": len(rev_snippets),
                     "used_snippets": len(allocation['snippets']),
-                    "change_ratio": round(diff_res.change_ratio, 4),
+                    "change_ratio": round(diff_res.get('change_ratio', 0), 4),
                     **validation,
                 },
                 template_sha256=template_sha,
@@ -312,15 +359,26 @@ def run_revise(job_id: int):
                 retrieval_metrics={
                     "snippet_count": len(rev_snippets),
                     "used_snippets": len(allocation['snippets']),
-                    "change_ratio": round(diff_res.change_ratio, 4),
+                    "change_ratio": round(diff_res.get('change_ratio', 0), 4),
                     **validation,
                 },
             )
-        job.result_json = {"draft_text": res.text, "diff_unified": diff_res.summary[:50000]}  # type: ignore[assignment]
+        job.result_json = {"draft_text": res.text, "diff": diff_res}  # type: ignore[assignment]
         # Apply revision to section (keep as draft, don't auto-promote)
         section = get_section(section_id)
         if section:
             apply_revision(section, res.text, promote=False)
+            try:
+                # Append revision log (user context optional if job.created_by absent)
+                section.append_revision(
+                    user_id=getattr(job.created_by, 'id', None),
+                    from_text=base_text,
+                    to_text=res.text,
+                    diff=diff_res,
+                    change_ratio=diff_res.get('change_ratio'),
+                )
+            except Exception:  # pragma: no cover - logging suppressed
+                pass
         job.status = 'done'
         dt_ms = int((time.time() - t0) * 1000)
         try:

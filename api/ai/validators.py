@@ -47,9 +47,35 @@ def validate_writer_output(data: dict[str, Any]) -> dict[str, Any]:
 def validate_reviser_output(data: dict[str, Any]) -> dict[str, Any]:
     _require(data, "revised", (str,))
     diff = _require(data, "diff", dict)
-    # minimal diff structure expectations
-    _require(diff, "added", list, allow_empty=True)
-    _require(diff, "removed", list, allow_empty=True)
+    # Two acceptable schemas:
+    # 1. Legacy: {added: [], removed: []}
+    # 2. Structured: {change_ratio: float, blocks: [ {type, before, after, similarity?} ] }
+    legacy_ok = all(k in diff for k in ("added", "removed"))
+    structured_ok = ("blocks" in diff and isinstance(diff.get("blocks"), list))
+    if not (legacy_ok or structured_ok):
+        raise SchemaError("diff must contain either added/removed or blocks list")
+    if legacy_ok:
+        _require(diff, "added", list, allow_empty=True)
+        _require(diff, "removed", list, allow_empty=True)
+    if structured_ok:
+        # change_ratio optional but if present must be numeric
+        if "change_ratio" in diff and not isinstance(diff["change_ratio"], (int, float)):
+            raise SchemaError("change_ratio must be number")
+        for i, block in enumerate(diff.get("blocks", [])):
+            if not isinstance(block, dict):
+                raise SchemaError(f"blocks[{i}] not object")
+            # Required keys
+            for req in ("type", "before", "after"):
+                if req not in block:
+                    raise SchemaError(f"blocks[{i}] missing {req}")
+            if not isinstance(block["type"], str):
+                raise SchemaError(f"blocks[{i}].type not str")
+            if not isinstance(block["before"], str):
+                raise SchemaError(f"blocks[{i}].before not str")
+            if not isinstance(block["after"], str):
+                raise SchemaError(f"blocks[{i}].after not str")
+            if "similarity" in block and not isinstance(block["similarity"], (int, float)):
+                raise SchemaError(f"blocks[{i}].similarity not number")
     return data
 
 

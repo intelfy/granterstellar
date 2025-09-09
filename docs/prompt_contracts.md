@@ -69,7 +69,7 @@ Extended deterministic redaction replaces simple `[REDACTED_*]` tokens with cate
 [ID_CODE_<hash10>]
 [SIMPLE_NAME_<hash10>]
 [ADDRESS_LINE_<hash10>]
-```
+```json
 
 Where `<hash10>` = first 10 hex chars of sha256(original_match). This provides:
 
@@ -117,6 +117,74 @@ Guardrails:
 
 - Schema JSON serialization errors are swallowed (defensive) but should be prevented via pre-save validation in future.
 - Instructions trimmed to avoid trailing whitespace bloat.
+
+## Structured Diff (Reviser Output)
+
+The reviser role now returns a canonical structured diff object alongside the revised text. This enables:
+
+- Precise UI highlighting of changed regions
+- Change ratio metrics (for abuse detection / pacing)
+- Backward compatible evolution away from legacy added/removed arrays
+
+### Schema
+
+```json
+{
+   "revised": "<string>",
+   "diff": {
+      "change_ratio": <float 0..1>,
+      "blocks": [
+         {
+            "type": "equal" | "replace" | "insert" | "delete",
+            "before": "<string>"   // omitted for pure inserts
+            "after": "<string>"    // omitted for pure deletes
+            "similarity": <float 0..1 OPTIONAL for replace blocks>
+         },
+         // ... up to capped number (validator currently allows any length; model layer truncates when storing revisions)
+      ]
+   }
+}
+```
+
+Rules / Semantics:
+
+- `change_ratio` is a normalized proportion of changed tokens (implementation: diff engine heuristic; treated as advisory metric not cryptographic).
+- A `replace` block supplies both `before` and `after` text; an `insert` only `after`; a `delete` only `before`; an `equal` provides both identical strings.
+- Optional `similarity` may accompany `replace` blocks where upstream model produces token-level similarity ≥ 0 and ≤ 1.
+- Blocks are ordered; consumers must render sequentially for deterministic reconstruction.
+
+### Legacy Compatibility
+
+Historical schema used:
+
+```
+{"revised": "...", "diff": {"added": ["..."], "removed": ["..."]}}
+```
+
+Validator (`validate_reviser_output`) still accepts this shape. New code SHOULD emit the structured form; legacy form will be deprecated after UI fully migrates (target: post v1 GA). Tests assert both remain valid until removal.
+
+### Storage & Truncation
+
+`ProposalSection.append_revision` stores:
+
+- `change_ratio` (float)
+- `blocks` (capped: 25 entries; each `before`/`after` truncated to 1000 chars to prevent unbounded growth)
+- Revised text snapshot truncated to 15k chars; revision history capped at 50 entries per section (oldest dropped).
+
+### Client Rendering Guidance
+
+1. Iterate blocks; for `equal` render plain.
+2. For `replace` render deletion + insertion styling (use similarity to optionally collapse cosmetic changes).
+3. For `insert` highlight insertion; for `delete` highlight removal.
+4. Fallback: if only legacy arrays present, treat each `added` as synthetic `insert` and each `removed` as synthetic `delete` preserving order of appearance.
+
+### Future Enhancements (Not Yet Implemented)
+
+- Word-level diff blocks nested inside line-level blocks
+- Classification tags (reason, semantic category) for each change
+- Hashes for integrity of diff application
+
+Update this section when extending schema; increment relevant migration marker even if DB schema unchanged for audit traceability.
 
 ## Template Drift Detection
 

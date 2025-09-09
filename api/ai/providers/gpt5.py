@@ -9,6 +9,7 @@ from ai.validators import (
 )
 from .util import summarize_file_refs
 from ai.context_budget import apply_context_budget
+from ai.diff_engine import diff_texts
 
 
 class Gpt5Provider(BaseProvider):
@@ -55,17 +56,26 @@ class Gpt5Provider(BaseProvider):
         file_refs: Optional[List[Dict[str, Any]]] = None,
         deterministic: bool = False,
     ) -> AIResult:
+        """Return a revised text plus structured diff.
+
+        This stub provider deterministically constructs a revision rather than
+        calling an external model. We still run through the validation layer
+        so contract regressions are caught in tests.
+        """
         budget = apply_context_budget(
             retrieval=[],
             memory=[],
             file_refs=file_refs or [],
             model_max_tokens=None,
         )
-        text = base_text + "\n\n[gpt-5] Changes: " + change_request
+        # Build revised text (strip to normalize whitespace for diff stability)
+        text = base_text.rstrip() + "\n\n[gpt-5] Changes: " + change_request.strip()
         ctx = summarize_file_refs(budget.file_refs)
-        payload = {"revised": text + ctx, "diff": {"added": [], "removed": []}}
+        revised = text + ctx
+        diff = diff_texts(base_text, revised)
+        payload = {"revised": revised, "diff": diff}
         validate_reviser_output(payload)
-        return AIResult(text=payload["revised"], usage_tokens=0, model_id="gpt-5")
+        return AIResult(text=revised, usage_tokens=0, model_id="gpt-5")
 
     def format_final(
         self,

@@ -102,11 +102,16 @@ def get_limits_for_tier(tier: str) -> QuotaLimits:
 
 
 def get_usage(user, org: Optional[Organization]) -> QuotaUsage:
+    """Return usage for the provided scope.
+
+    Legacy behavior counted personal proposals via org IS NULL. Schema now enforces
+    NOT NULL; we treat a missing org argument as zero usage (caller will typically
+    supply an org). This keeps quota logic backwards compatible during transition.
+    """
     period_start = _period_start()
-    if org is not None:
-        base = Proposal.objects.filter(org=org)
-    else:
-        base = Proposal.objects.filter(author=user, org__isnull=True)
+    if org is None:
+        return QuotaUsage(active_count=0, created_this_period=0)
+    base = Proposal.objects.filter(org=org)
     active_count = base.exclude(state="archived").count()
     created_this_period = base.filter(created_at__gte=period_start).count()
     return QuotaUsage(active_count=active_count, created_this_period=created_this_period)
@@ -184,10 +189,7 @@ def check_can_create_proposal(user, org: Optional[Organization]):
 
     # For free tier: lifetime cap of 1 proposal in the selected scope
     if tier == "free":
-        if org is not None:
-            total = Proposal.objects.filter(org=org).count()
-        else:
-            total = Proposal.objects.filter(author=user, org__isnull=True).count()
+        total = Proposal.objects.filter(org=org).count() if org is not None else 0
         if total >= 1:
             return False, {
                 "tier": tier,
@@ -236,10 +238,7 @@ def can_unarchive(user, org: Optional[Organization], proposal: Proposal) -> Tupl
     tier, status = get_subscription_for_scope(user, org)
     limits = get_limits_for_tier(tier)
     # Count actives excluding this proposal
-    if org is not None:
-        base = Proposal.objects.filter(org=org)
-    else:
-        base = Proposal.objects.filter(author=user, org__isnull=True)
+    base = Proposal.objects.filter(org=org) if org is not None else Proposal.objects.none()
     active_others = base.exclude(state="archived").exclude(id=proposal.id).count()
     if limits.active_cap is not None and active_others >= limits.active_cap:
         return False, {

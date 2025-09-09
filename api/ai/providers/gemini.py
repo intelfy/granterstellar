@@ -9,6 +9,7 @@ from ai.validators import (
 )
 from .util import summarize_file_refs
 from ai.context_budget import apply_context_budget
+from ai.diff_engine import diff_texts
 
 
 class GeminiProvider(BaseProvider):
@@ -53,18 +54,25 @@ class GeminiProvider(BaseProvider):
         file_refs: Optional[List[Dict[str, Any]]] = None,
         deterministic: bool = False,
     ) -> AIResult:
+        """Return revised text plus structured diff for contract validation.
+
+        Deterministic stub mirroring real provider contract. Adds a polish tag
+        and optional deterministic flag, then produces a structured diff.
+        """
         budget = apply_context_budget(
             retrieval=[],
             memory=[],
             file_refs=file_refs or [],
             model_max_tokens=None,
         )
-        formatted = base_text.strip() + "\n\n[gemini:polish] " + change_request.strip()
+        formatted = base_text.rstrip() + "\n\n[gemini:polish] " + change_request.strip()
         det = " deterministic=1" if deterministic else ""
         ctx = summarize_file_refs(budget.file_refs)
-        payload = {"revised": formatted + det + ctx, "diff": {"added": [], "removed": []}}
+        revised = formatted + det + ctx
+        diff = diff_texts(base_text, revised)
+        payload = {"revised": revised, "diff": diff}
         validate_reviser_output(payload)
-        return AIResult(text=payload["revised"], usage_tokens=0, model_id="gemini")
+        return AIResult(text=revised, usage_tokens=0, model_id="gemini")
 
     def format_final(
         self,

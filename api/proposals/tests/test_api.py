@@ -26,3 +26,23 @@ class ProposalsApiTests(TestCase):
         )
         self.assertEqual(resp2.status_code, 402)
         self.assertEqual(resp2.json().get("error"), "quota_exceeded")
+
+    def test_call_url_write_once(self):
+        self.client.force_login(self.user)
+        # First proposal with call_url
+        r1 = self.client.post(
+            "/api/proposals/",
+            data={"content": {"title": "With URL"}, "call_url": "https://example.org/call"},
+            content_type="application/json",
+        )
+        # Allow either 201 or 200 depending on renderer
+        self.assertIn(r1.status_code, (200, 201))
+        pid = r1.json()["id"]
+        # Attempt to change call_url
+        r2 = self.client.patch(
+            f"/api/proposals/{pid}/",
+            data={"call_url": "https://malicious.example/change"},
+            content_type="application/json",
+        )
+        self.assertIn(r2.status_code, (200, 202))
+        self.assertEqual(r2.json()["call_url"], "https://example.org/call")
