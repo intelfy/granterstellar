@@ -1,7 +1,12 @@
 """Ingestion & chunking pipeline (Phase 2 scaffolding).
 
-NOTE: Lightweight implementation – HTML cleaning is simplistic; replace with
-readability/boilerplate removal in future iteration.
+NOTE: Lightweight implementation – HTML cleaning is now performed via a
+stateful HTMLParser that removes script/style/noscript and dangerous tags
+instead of brittle regex stripping. Only textual data from safe tags is
+retained; attributes are ignored. Whitespace is normalized. This mitigates
+potential bypasses (e.g., malformed tags, embedded <script> variants,
+inline event handlers) and reduces the risk of prompt‑injection via hidden
+content.
 """
 
 from __future__ import annotations
@@ -10,6 +15,7 @@ import re
 import hashlib
 import requests
 import yaml
+from html.parser import HTMLParser
 from django.db import transaction
 
 from .models import AIResource, AIChunk
@@ -17,15 +23,69 @@ from .embedding_service import embed_texts
 from .retrieval import _cosine  # reuse cosine similarity
 
 
-def _clean_html(html: str) -> str:
-    # Remove scripts/styles
-    html = re.sub(r'<script.*?</script>', ' ', html, flags=re.DOTALL | re.IGNORECASE)
-    html = re.sub(r'<style.*?</style>', ' ', html, flags=re.DOTALL | re.IGNORECASE)
-    # Strip tags
-    text = re.sub(r'<[^>]+>', ' ', html)
-    # Collapse whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
+class _SafeTextExtractor(HTMLParser):
+    """HTML → plain text extractor with a conservative allowlist.
+
+    Policy:
+      - Drop entirely: script, style, noscript, iframe, object, embed, svg, canvas, meta, link
+      - Ignore attributes
+      - Convert <br>, <p>, <div>, <li>, <section>, <article>, <h1>.. <h6> into line breaks
+    """
+
+    _BLOCK = {'script', 'style', 'noscript', 'iframe', 'object', 'embed', 'svg', 'canvas', 'meta', 'link'}
+    _BREAK = {'p', 'div', 'br', 'li', 'section', 'article', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._out: list[str] = []
+        self._suppress_depth = 0
+
+    def handle_starttag(self, tag, attrs):  # noqa: D401 - inherited
+        t = tag.lower()
+        if t in self._BLOCK:
+            self._suppress_depth += 1
+            return
+        if self._suppress_depth:
+            return
+        if t in self._BREAK:
+            self._out.append('\n')
+
+    def handle_endtag(self, tag):
+        t = tag.lower()
+        if t in self._BLOCK and self._suppress_depth:
+            self._suppress_depth -= 1
+            return
+        if self._suppress_depth:
+            return
+        if t in self._BREAK:
+            self._out.append('\n')
+
+    def handle_data(self, data):
+        if self._suppress_depth:
+            return
+        # Minimal noise trimming; keep internal spaces to avoid word joins
+        if data.strip():
+            self._out.append(data)
+
+    def get_text(self) -> str:
+        # Join and normalize whitespace
+        raw = ' '.join(self._out)
+        raw = re.sub(r'[ \t\f\r\v]+', ' ', raw)
+        raw = re.sub(r'\n{2,}', '\n', raw)
+        return raw.strip()
+
+
+def _clean_html(html: str) -> str:  # noqa: D401
+    parser = _SafeTextExtractor()
+    try:
+        parser.feed(html)
+        parser.close()
+    except Exception:
+        # Fallback to simple tag strip if parser fails (rare malformed input)
+        text = re.sub(r'<[^>]+>', ' ', html)
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()[:200000]
+    return parser.get_text()[:200000]
 
 
 def _chunk_text(text: str, *, max_chars: int = 800) -> list[str]:

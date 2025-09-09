@@ -16,6 +16,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from billing.models import Subscription
 from orgs.models import OrgInvite, OrgUser
 
+# Sensitive OAuth token / assertion keys that must never be persisted or logged.
+SENSITIVE_KEYS = {'access_token', 'refresh_token', 'id_token', 'token', 'code'}
+
 
 def _issue_tokens_for_user(user):
     """Return access/refresh JWTs for a user."""
@@ -236,8 +239,12 @@ def google_callback(request):
             token_payload = json.loads(body)
     except Exception:
         return JsonResponse({'ok': False, 'error': 'token exchange failed', 'code': 'token_exchange_failed'}, status=400)
-
+    # SECURITY: never persist or log raw token payload; keep only id_token for verification then delete.
     id_token = token_payload.get('id_token')
+    # Explicitly delete other sensitive entries to avoid accidental future use.
+    for k in list(token_payload.keys()):
+        if k != 'id_token' and k in SENSITIVE_KEYS:
+            del token_payload[k]
     if not id_token:
         return JsonResponse({'ok': False, 'error': 'missing id_token', 'code': 'missing_id_token'}, status=400)
 
@@ -397,6 +404,10 @@ def github_callback(request):
     except Exception:
         return JsonResponse({'ok': False, 'error': 'token exchange failed', 'code': 'token_exchange_failed'}, status=400)
     access_token = token_payload.get('access_token')
+    # Discard any extraneous sensitive keys immediately.
+    for k in list(token_payload.keys()):
+        if k != 'access_token' and k in SENSITIVE_KEYS:
+            del token_payload[k]
     if not access_token:
         return JsonResponse({'ok': False, 'error': 'missing access token', 'code': 'missing_access_token'}, status=400)
 
@@ -564,10 +575,10 @@ def facebook_callback(request):
             token_payload = json.loads(body)
     except Exception:
         return JsonResponse({'ok': False, 'error': 'token exchange failed', 'code': 'token_exchange_failed'}, status=400)
-
     access_token = token_payload.get('access_token')
-    if not access_token:
-        return JsonResponse({'ok': False, 'error': 'missing access token', 'code': 'missing_access_token'}, status=400)
+    for k in list(token_payload.keys()):
+        if k != 'access_token' and k in SENSITIVE_KEYS:
+            del token_payload[k]
 
     # Fetch user email via Graph API
     # Fixed origin for Facebook Graph API; assemble URL safely

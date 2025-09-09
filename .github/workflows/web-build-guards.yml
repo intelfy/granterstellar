@@ -11,6 +11,9 @@ on:
       - 'web/**'
       - '.github/workflows/web-build-guards.yml'
 
+permissions:
+  contents: read
+
 jobs:
   build-and-guard:
     runs-on: ubuntu-latest

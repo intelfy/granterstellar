@@ -11,6 +11,9 @@ on:
       - 'scripts/deps_audit.sh'
       - '.github/workflows/deps_audit.yml'
 
+permissions:
+  contents: read
+
 jobs:
   python-audit:
     runs-on: ubuntu-latest

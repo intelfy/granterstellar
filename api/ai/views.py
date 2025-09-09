@@ -16,6 +16,10 @@ from django.utils import timezone
 from .decorators import ai_protected
 from django.db import models
 from app.common.keys import t
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class DebugOrAuthPermission(BasePermission):
@@ -227,7 +231,17 @@ def plan(request):
         return Response({'job_id': job.id, 'status': job.status})  # type: ignore[attr-defined]
     provider = get_provider(getattr(settings, 'AI_PROVIDER', None))
     t0 = time.time()
-    plan_result = provider.plan(grant_url=grant_url or None, text_spec=text_spec or None)
+    try:
+        plan_result = provider.plan(grant_url=grant_url or None, text_spec=text_spec or None)
+    except Exception:  # noqa: BLE001
+        logger.exception('AI provider.plan failed')
+        return Response(
+            {
+                'error': 'ai_provider_error',
+                'message': t('errors.ai.provider_failed'),
+            },
+            status=502,
+        )
     dt_ms = int((time.time() - t0) * 1000)
     from .models import AIMetric
 
@@ -327,7 +341,11 @@ def write(request):
             deterministic = deterministic_default
     else:
         deterministic = deterministic_default
-    res = provider.write(section_id=section_id, answers=answers, file_refs=file_refs or None, deterministic=deterministic)  # type: ignore[arg-type]
+    try:
+        res = provider.write(section_id=section_id, answers=answers, file_refs=file_refs or None, deterministic=deterministic)  # type: ignore[arg-type]
+    except Exception:
+        logger.exception('AI provider.write failed')
+        return Response({'error': 'ai_provider_error', 'message': t('errors.ai.provider_failed')}, status=502)
     # (single-write marker already set at entry)
     dt_ms = int((time.time() - t0) * 1000)
     from .models import AIMetric
@@ -458,12 +476,16 @@ def revise(request):
             deterministic = deterministic_default
     else:
         deterministic = deterministic_default
-    res = provider.revise(
-        base_text=base_text,
-        change_request=change_request,
-        file_refs=file_refs or None,
-        deterministic=deterministic,
-    )  # type: ignore[arg-type]
+    try:
+        res = provider.revise(
+            base_text=base_text,
+            change_request=change_request,
+            file_refs=file_refs or None,
+            deterministic=deterministic,
+        )  # type: ignore[arg-type]
+    except Exception:
+        logger.exception('AI provider.revise failed')
+        return Response({'error': 'ai_provider_error', 'message': t('errors.ai.provider_failed')}, status=502)
     dt_ms = int((time.time() - t0) * 1000)
     from .models import AIMetric
 
@@ -541,12 +563,16 @@ def format(request):
             deterministic = deterministic_default
     else:
         deterministic = deterministic_default
-    res = provider.format_final(
-        full_text=full_text,
-        template_hint=template_hint or None,
-        file_refs=file_refs or None,
-        deterministic=deterministic,
-    )
+    try:
+        res = provider.format_final(
+            full_text=full_text,
+            template_hint=template_hint or None,
+            file_refs=file_refs or None,
+            deterministic=deterministic,
+        )
+    except Exception:
+        logger.exception('AI provider.format_final failed')
+        return Response({'error': 'ai_provider_error', 'message': t('errors.ai.provider_failed')}, status=502)
     dt_ms = int((time.time() - t0) * 1000)
     from .models import AIMetric
 

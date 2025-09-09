@@ -11,6 +11,9 @@ on:
       - 'api/**'
       - '.github/workflows/api-image-strip-py.yml'
 
+permissions:
+  contents: read
+
 jobs:
   build-and-verify:
     runs-on: ubuntu-latest

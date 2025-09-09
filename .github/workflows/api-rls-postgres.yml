@@ -11,6 +11,9 @@ on:
       - 'api/**'
       - '.github/workflows/api-rls-postgres.yml'
 
+permissions:
+  contents: read
+
 jobs:
   rls-tests:
     runs-on: ubuntu-latest
